@@ -3,7 +3,7 @@ go:
   # .circle/config.yml should also be updated.
   version: 1.15
 repository:
-  path: github.com/prometheus/blackbox_exporter
+  path: git@gitee.com:paycooplus/data-exporter.git
 build:
   flags: -a -tags netgo
   ldflags: |

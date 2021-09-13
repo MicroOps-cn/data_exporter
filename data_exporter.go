@@ -14,9 +14,9 @@
 package main
 
 import (
-	"data_exporter/config"
 	"errors"
 	"fmt"
+	"gitee.com/paycooplus/data-exporter/config"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -36,12 +36,11 @@ import (
 	"syscall"
 )
 
-const exporterName string = "data_exporter"
-
 var (
 	sc = &config.SafeConfig{
 		C: &config.Config{},
 	}
+	exporterName          = config.ExporterName
 	webConfig             = webflag.AddFlags(kingpin.CommandLine)
 	listenAddress         = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9115").String()
 	configFile            = kingpin.Flag("config.file", "Blackbox exporter configuration file.").Default(exporterName + ".yml").String()

@@ -21,6 +21,8 @@ import (
 	"sync"
 )
 
+const ExporterName string = "data_exporter"
+
 type DataFormat string
 
 const (
@@ -122,13 +124,13 @@ type Config struct {
 
 var (
 	configReloadSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "blackbox_exporter",
+		Namespace: ExporterName,
 		Name:      "config_last_reload_successful",
 		Help:      "Blackbox exporter config loaded successfully.",
 	})
 
 	configReloadSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "blackbox_exporter",
+		Namespace: ExporterName,
 		Name:      "config_last_reload_success_timestamp_seconds",
 		Help:      "Timestamp of the last successful configuration reload.",
 	})

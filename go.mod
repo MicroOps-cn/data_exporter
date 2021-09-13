@@ -1,4 +1,4 @@
-module data_exporter
+module gitee.com/paycooplus/data-exporter
 
 require (
 	github.com/go-kit/kit v0.9.0
