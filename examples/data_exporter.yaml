@@ -1,0 +1,25 @@
+collects:
+- name: "test-http"
+  labels: { }
+  data_format: "json"
+  metric_name_prefix: ""
+  datasource:
+    - type: "http"
+      url: "https://localhost/examples/my_data.json"
+      labels:
+        position: "server"
+    - type: "file"
+      metric_name_prefix: ""
+      url: "./examples/my_data.json"
+  datapoints:
+    - name: "Point1"
+      labels: {}
+      metric_name:
+        regex: ".*"
+        replace: "-$1-"
+      match:
+        datapoint: ""
+        metric_name: ""
+        labels: ""
+        timestamp: ""
+        value: ""
