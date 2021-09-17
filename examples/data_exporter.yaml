@@ -7,8 +7,9 @@ collects:
         url: "../examples/my_data.json"
     metrics:
       - name: "Point1"
-        metric_type: "counter"
         relabel_configs:
+          - target_label: __namespace__
+            replacement: "node_server"
           - source_labels: [ __name__ ]
             target_label: name
             regex: "([^.]+)\\.metrics\\..+"
@@ -17,7 +18,7 @@ collects:
           - source_labels: [ __name__ ]
             target_label: __name__
             regex: "[^.]+\\.metrics\\.(.+)"
-            replacement: "server_$1"
+            replacement: "$1"
             action: replace
         match:
           datapoint: "data|@expand|@expand|@to_entries:name:value"
@@ -64,3 +65,121 @@ collects:
             name: '{{ ((.FindElement "../").SelectAttr "quName").Value }}'
             __name__: "week"
             path: "{{ .GetPath }}"
+  - name: "正则匹配-1"
+    data_format: "regex"
+    relabel_configs:
+      - target_label: __namespace__
+        replacement: "node_server"
+      - source_labels: [ __raw__ ]
+        target_label: name
+        regex: "#([^/]+).*"
+    datasource:
+      - type: "file"
+        url: "../examples/my_data.txt"
+    metrics:
+      - name: "server cpu"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: __value__
+            regex: "(?s:.*cpu=([0-9]+).*)"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: "(?s:\\[(.+?)].*)"
+          - target_label: __name__
+            replacement: "cpu"
+        match:
+          datapoint: "(?ms:\\[[^[]+)"
+          labels:
+            __raw__: "(?s:.*)"
+      - name: "server memory"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: __value__
+            regex: "(?s:.*memory=([0-9]+).*)"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: "(?s:\\[(.+?)].*)"
+          - target_label: __name__
+            replacement: "memory"
+        match:
+          datapoint: "(?ms:\\[[^[]+)"
+          labels:
+            __raw__: "(?s:.*)"
+      - name: "server info"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: hostname
+            regex: "(?s:.*hostname=(.+?)\n.*)"
+          - source_labels: [ __raw__ ]
+            target_label: ip
+            regex: "(?s:.*ip=([0-9.]+).*)"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: "(?s:\\[(.+?)].*)"
+          - target_label: __value__
+            replacement: "1"
+          - target_label: __name__
+            replacement: "info"
+        match:
+          datapoint: "(?ms:\\[[^[]+)"
+          labels:
+            __raw__: "(?s:.*)"
+  - name: "正则匹配-2"
+    data_format: "regex"
+    relabel_configs:
+      - target_label: __namespace__
+        replacement: "node_server"
+      - source_labels: [ __raw__ ]
+        target_label: name
+        regex: "#([^/]+).*"
+    datasource:
+      - type: "file"
+        url: "../examples/my_data_line.txt"
+    metrics:
+      - name: "server cpu"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: __value__
+            regex: ".*cpu=(.+?)[!/].*"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: ".*@\\[(.+?)].*"
+          - target_label: __name__
+            replacement: "cpu"
+        match:
+          datapoint: "@.*!"
+          labels:
+            __raw__: ".*"
+      - name: "server memory"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: __value__
+            regex: ".*memory=(.+?)[!/].*"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: ".*@\\[(.+?)].*"
+          - target_label: __name__
+            replacement: "memory"
+        match:
+          datapoint: "@.*!"
+          labels:
+            __raw__: ".*"
+      - name: "server info"
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            target_label: hostname
+            regex: ".*hostname=(.+?)[!/].*"
+          - source_labels: [ __raw__ ]
+            target_label: ip
+            regex: ".*ip=(.+?)[!/].*"
+          - source_labels: [ __raw__ ]
+            target_label: name
+            regex: ".*@\\[(.+?)].*"
+          - target_label: __value__
+            replacement: "1"
+          - target_label: __name__
+            replacement: "info"
+        match:
+          datapoint: "@.*!"
+          labels:
+            __raw__: ".*"
