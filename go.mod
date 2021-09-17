@@ -5,6 +5,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/go-kit/log v0.1.0
 	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.29.0
 	github.com/prometheus/exporter-toolkit v0.6.1
 	github.com/stretchr/testify v1.7.0
