@@ -1,0 +1,10 @@
+[server4]
+cpu=12
+memory=24359738368
+hostname=database1
+ip=1.1.1.1
+[server3]
+cpu=16
+memory=24359738368
+hostname=gateway-server1
+ip=2.2.2.2

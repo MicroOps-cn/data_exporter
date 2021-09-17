@@ -1,0 +1,44 @@
+<root>
+    <china dn="day">
+        <weather>
+            <city quName="黑龙江" pyName="heilongjiang" cityname="哈尔滨" state1="4" state2="1" stateDetailed="雷阵雨转多云"
+                  tem1="20"
+                  tem2="9" windState="西南风3-4级转西风微风级">15
+            </city>
+            <city quName="吉林" pyName="jilin" cityname="长春" state1="7" state2="1" stateDetailed="小雨转多云" tem1="20"
+                  tem2="10"
+                  windState="西风转东南风微风级">16
+            </city>
+            <city quName="辽宁" pyName="liaoning" cityname="沈阳" state1="3" state2="1" stateDetailed="阵雨转多云" tem1="21"
+                  tem2="15" windState="北风3-4级">18
+            </city>
+            <city quName="海南" pyName="hainan" cityname="海口" state1="1" state2="1" stateDetailed="多云" tem1="32" tem2="26"
+                  windState="微风">30
+            </city>
+        </weather>
+    </china>
+    <china dn="week">
+        <city quName="黑龙江" pyName="heilongjiang" cityname="哈尔滨" state1="4" state2="1" stateDetailed="雷阵雨转多云" tem1="21"
+              tem2="9" windState="西南风3-4级转西风微风级">
+            <weather>18</weather>
+        </city>
+        <city quName="吉林" pyName="jilin" cityname="长春" state1="7" state2="1" stateDetailed="小雨转多云" tem1="20" tem2="13"
+              windState="西风转东南风微风级">
+            <weather>17</weather>
+        </city>
+    </china>
+    <china dn="hour">
+        <weather>
+            <city quName="黑龙江" pyName="heilongjiang" cityname="哈尔滨" state1="4" state2="1" stateDetailed="雷阵雨转多云"
+                  tem1="20"
+                  tem2="9" windState="西南风3-4级转西风微风级">15
+            </city>
+        </weather>
+        <weather>
+            <city quName="吉林" pyName="jilin" cityname="长春" state1="7" state2="1" stateDetailed="小雨转多云" tem1="20"
+                  tem2="10"
+                  windState="西风转东南风微风级">16
+            </city>
+        </weather>
+    </china>
+</root>

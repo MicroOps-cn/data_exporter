@@ -15,111 +15,19 @@ package config
 
 import (
 	"fmt"
+	"gitee.com/paycooplus/data-exporter/collector"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"
+	"io"
 	"os"
 	"sync"
 )
 
 const ExporterName string = "data_exporter"
 
-type DataFormat string
-
-const (
-	Text DataFormat = "Text"
-	Json DataFormat = "json"
-	Xml  DataFormat = "xml"
-	Yaml DataFormat = "yaml"
-)
-
-type DatasourceType string
-
-const (
-	Http DatasourceType = "http"
-	File DatasourceType = "file"
-)
-
-type Datasource struct {
-	Name             string         `yaml:"name"`
-	MetricNamePrefix string         `yaml:"metric_name_prefix"`
-	Labels           Labels         `yaml:"labels"`
-	Url              string         `yaml:"url"`
-	Type             DatasourceType `yaml:"type"`
-}
-
-type Label struct {
-	Name              string `yaml:"name"`
-	Value             string `yaml:"value"`
-	ValueRegexReplace string `yaml:"value_regex_replace"`
-	Weight            uint8  `yaml:"weight"` // 0~255，默认权重100
-}
-
-type Labels []Label
-
-func (l *Labels) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var sliceLabels []Label
-	if err := unmarshal(&sliceLabels); err != nil {
-		var mapLabels = map[string]string{}
-		if err := unmarshal(&mapLabels); err != nil {
-			return err
-		}
-		for key, value := range mapLabels {
-			*l = append(*l, Label{Name: key, Value: value, Weight: 100})
-		}
-	}
-
-	for _, label := range *l {
-		if len(label.Value) == 0 || len(label.Name) == 0 {
-			return fmt.Errorf("label format error: name and value cannot be empty")
-		}
-	}
-	return nil
-}
-
-type DatapointMatch struct {
-	Datapoint  string `yaml:"datapoint"`
-	MetricName string `yaml:"metric_name"`
-	Labels     string `yaml:"labels"`
-	Timestamp  string `yaml:"timestamp"`
-	Value      string `yaml:"value"`
-}
-
-type MetricName struct {
-	Replace string `yaml:"replace"`
-	Regex   string `yaml:"regex"`
-}
-
-func (m *MetricName) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	type plain MetricName
-	m.Regex = "(.*)"
-	m.Replace = "$1"
-	if err := unmarshal((*plain)(m)); err != nil {
-		return err
-	}
-	return nil
-}
-
-type Datapoint struct {
-	Name       string         `yaml:"name"`
-	MetricName MetricName     `yaml:"metric_name"`
-	Labels     Labels         `yaml:"labels"`
-	Match      DatapointMatch `yaml:"match"`
-}
-
-type Datapoints []Datapoint
-
-type Collect struct {
-	Name       string
-	Labels     Labels       `yaml:"labels"`
-	DataFormat DataFormat   `yaml:"data_format"`
-	Datasource []Datasource `yaml:"datasource"`
-	Datapoint  Datapoints   `yaml:"datapoints"`
-}
-
-type Collects []Collect
-
 type Config struct {
-	Collects Collects `yaml:"collects"`
+	Collects collector.Collects `yaml:"collects"`
 }
 
 var (
@@ -136,9 +44,8 @@ var (
 	})
 )
 
-func init() {
-	prometheus.MustRegister(configReloadSuccess)
-	prometheus.MustRegister(configReloadSeconds)
+func RegisterCollector(reg prometheus.Registerer) {
+	reg.MustRegister(configReloadSuccess, configReloadSeconds)
 }
 
 type SafeConfig struct {
@@ -146,8 +53,29 @@ type SafeConfig struct {
 	C *Config
 }
 
-func (sc *SafeConfig) ReloadConfig(confFile string, logger interface{}) (err error) {
+func NewConfig() *SafeConfig {
+	return &SafeConfig{
+		C: &Config{},
+	}
+}
+
+func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, _ log.Logger) (err error) {
 	var c = &Config{}
+	decoder := yaml.NewDecoder(reader)
+	decoder.KnownFields(true)
+
+	if err = decoder.Decode(c); err != nil {
+		return fmt.Errorf("error parsing config file: %s", err)
+	}
+
+	sc.Lock()
+	sc.C = c
+	sc.Unlock()
+	return nil
+}
+
+func (sc *SafeConfig) ReloadConfig(confFile string, logger log.Logger) (err error) {
+
 	defer func() {
 		if err != nil {
 			configReloadSuccess.Set(0)
@@ -162,15 +90,5 @@ func (sc *SafeConfig) ReloadConfig(confFile string, logger interface{}) (err err
 		return fmt.Errorf("error reading config file: %s", err)
 	}
 	defer yamlReader.Close()
-	decoder := yaml.NewDecoder(yamlReader)
-	decoder.KnownFields(true)
-
-	if err = decoder.Decode(c); err != nil {
-		return fmt.Errorf("error parsing config file: %s", err)
-	}
-
-	sc.Lock()
-	sc.C = c
-	sc.Unlock()
-	return nil
+	return sc.ReloadConfigFromReader(yamlReader, logger)
 }

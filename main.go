@@ -16,9 +16,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"gitee.com/paycooplus/data-exporter/collector"
 	"gitee.com/paycooplus/data-exporter/config"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
@@ -26,6 +29,7 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"gopkg.in/alecthomas/kingpin.v2"
+	stdlog "log"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,26 +41,15 @@ import (
 )
 
 var (
-	sc = &config.SafeConfig{
-		C: &config.Config{},
-	}
-	exporterName          = config.ExporterName
-	webConfig             = webflag.AddFlags(kingpin.CommandLine)
-	listenAddress         = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9115").String()
-	configFile            = kingpin.Flag("config.file", "Blackbox exporter configuration file.").Default(exporterName + ".yml").String()
-	routePrefix           = kingpin.Flag("web.route-prefix", "Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").PlaceHolder("<path>").String()
-	configCheck           = kingpin.Flag("config.check", "If true validate the config file and then exit.").Default().Bool()
-	externalURL           = kingpin.Flag("web.external-url", "The URL under which Blackbox exporter is externally reachable (for example, if Blackbox exporter is served via a reverse proxy). Used for generating relative and absolute links back to Blackbox exporter itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by Blackbox exporter. If omitted, relevant URL components will be derived automatically.").PlaceHolder("<url>").String()
-	collectUnknownCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "data_collect_unknown_total",
-		Help: "Count of unknown collect requested by probes",
-	})
+	sc            = config.NewConfig()
+	exporterName  = config.ExporterName
+	webConfig     = webflag.AddFlags(kingpin.CommandLine)
+	listenAddress = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9115").String()
+	configFile    = kingpin.Flag("config.file", "Blackbox exporter configuration file.").Default(exporterName + ".yaml").String()
+	routePrefix   = kingpin.Flag("web.route-prefix", "Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").PlaceHolder("<path>").String()
+	configCheck   = kingpin.Flag("config.check", "If true validate the config file and then exit.").Default().Bool()
+	externalURL   = kingpin.Flag("web.external-url", "The URL under which Blackbox exporter is externally reachable (for example, if Blackbox exporter is served via a reverse proxy). Used for generating relative and absolute links back to Blackbox exporter itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by Blackbox exporter. If omitted, relevant URL components will be derived automatically.").PlaceHolder("<url>").String()
 )
-
-func init() {
-	prometheus.MustRegister(version.NewCollector(exporterName))
-	prometheus.MustRegister(collectUnknownCounter)
-}
 
 func main() {
 	os.Exit(run())
@@ -129,11 +122,7 @@ func run() int {
 	// Match Prometheus behaviour and redirect over externalURL for root path only
 	// if routePrefix is different than "/"
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		http.Redirect(w, r, beURL.String(), http.StatusFound)
+		http.NotFound(w, r)
 	})
 
 	http.HandleFunc(path.Join(*routePrefix, "/-/reload"),
@@ -151,7 +140,9 @@ func run() int {
 			}
 		})
 
-	http.Handle(path.Join(*routePrefix, "/metrics"), promhttp.Handler())
+	http.HandleFunc(path.Join(*routePrefix, "/metrics"), func(writer http.ResponseWriter, request *http.Request) {
+		collectMetrics(logger, writer, request)
+	})
 
 	http.HandleFunc(path.Join(*routePrefix, "/-/healthy"), func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -216,4 +207,32 @@ func computeExternalURL(u, listenAddr string) (*url.URL, error) {
 	eu.Path = ppref
 
 	return eu, nil
+}
+
+func collectMetrics(logger log.Logger, w http.ResponseWriter, r *http.Request) {
+	sc.Lock()
+	conf := sc.C
+	sc.Unlock()
+	reg := prometheus.NewRegistry()
+	for idx := range conf.Collects {
+		conf.Collects[idx].SetLogger(logger)
+		reg.MustRegister(&conf.Collects[idx])
+	}
+	reg.MustRegister(
+		promcollectors.NewProcessCollector(promcollectors.ProcessCollectorOpts{}),
+		promcollectors.NewGoCollector(),
+		version.NewCollector(exporterName),
+	)
+	config.RegisterCollector(reg)
+	collector.RegisterCollector(reg)
+	handler := promhttp.HandlerFor(
+		prometheus.Gatherers{reg},
+		promhttp.HandlerOpts{
+			ErrorLog:            stdlog.New(log.NewStdlibAdapter(level.Error(logger)), "", 0),
+			ErrorHandling:       promhttp.ContinueOnError,
+			MaxRequestsInFlight: 10,
+			Registry:            reg,
+		},
+	)
+	handler.ServeHTTP(w, r)
 }

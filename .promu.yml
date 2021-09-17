@@ -3,7 +3,7 @@ go:
   # .circle/config.yml should also be updated.
   version: 1.15
 repository:
-  path: git@gitee.com:paycooplus/data-exporter.git
+  path: gitee.com/paycooplus/data-exporter
 build:
   flags: -a -tags netgo
   ldflags: |

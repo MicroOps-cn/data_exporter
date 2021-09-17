@@ -1,25 +1,66 @@
 collects:
-- name: "test-http"
-  labels: { }
-  data_format: "json"
-  metric_name_prefix: ""
-  datasource:
-    - type: "http"
-      url: "https://localhost/examples/my_data.json"
-      labels:
-        position: "server"
-    - type: "file"
-      metric_name_prefix: ""
-      url: "./examples/my_data.json"
-  datapoints:
-    - name: "Point1"
-      labels: {}
-      metric_name:
-        regex: ".*"
-        replace: "-$1-"
-      match:
-        datapoint: ""
-        metric_name: ""
-        labels: ""
-        timestamp: ""
-        value: ""
+  - name: "test-http"
+    relabel_configs: [ ]
+    data_format: "json"
+    datasource:
+      - type: "file"
+        url: "../examples/my_data.json"
+    metrics:
+      - name: "Point1"
+        metric_type: "counter"
+        relabel_configs:
+          - source_labels: [ __name__ ]
+            target_label: name
+            regex: "([^.]+)\\.metrics\\..+"
+            replacement: "$1"
+            action: replace
+          - source_labels: [ __name__ ]
+            target_label: __name__
+            regex: "[^.]+\\.metrics\\.(.+)"
+            replacement: "server_$1"
+            action: replace
+        match:
+          datapoint: "data|@expand|@expand|@to_entries:name:value"
+          labels:
+            __value__: "value"
+            __name__: "name"
+  - name: "weather"
+    relabel_configs:
+      - target_label: __namespace__
+        replacement: "weather"
+        action: replace
+      - target_label: __subsystem__
+        replacement: "temperature"
+        action: replace
+      - target_label: zone
+        replacement: "china"
+        action: replace
+    data_format: "xml"
+    datasource:
+      - type: "file"
+        url: "../examples/weather.xml"
+    metrics:
+      - name: "weather - hour"
+        match:
+          datapoint: "//china[@dn='hour']/weather/city"
+          labels:
+            __value__: "{{ .Text }}"
+            name: '{{ (.SelectAttr "quName").Value }}'
+            __name__: "hour"
+            path: "{{ .GetPath }}"
+      - name: "weather - day"
+        match:
+          datapoint: "//china[@dn='day']/weather/city"
+          labels:
+            __value__: "{{ .Text }}"
+            name: '{{ (.SelectAttr "quName").Value }}'
+            __name__: "day"
+            path: "{{ .GetPath }}"
+      - name: "weather - week"
+        match:
+          datapoint: "//china[@dn='week']/city/weather"
+          labels:
+            __value__: "{{ .Text }}"
+            name: '{{ ((.FindElement "../").SelectAttr "quName").Value }}'
+            __name__: "week"
+            path: "{{ .GetPath }}"
