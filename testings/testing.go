@@ -36,7 +36,7 @@ func (t *T) AssertNoError(args ...interface{}) {
 }
 
 func (t *T) LogAndAssertNoError(args ...interface{}) {
-	t.Log(args)
+	t.Log(args...)
 	for _, arg := range args {
 		if err, ok := arg.(error); ok {
 			assert.NoError(t, err)

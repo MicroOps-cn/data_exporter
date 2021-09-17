@@ -15,7 +15,7 @@ package config
 
 import (
 	"fmt"
-	"gitee.com/paycooplus/data-exporter/collector"
+	"gitee.com/paycooplus/data_exporter/collector"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"

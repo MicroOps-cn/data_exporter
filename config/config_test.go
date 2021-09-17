@@ -15,8 +15,8 @@ package config
 
 import (
 	"bytes"
-	"gitee.com/paycooplus/data-exporter/collector"
-	testings "gitee.com/paycooplus/data-exporter/testings"
+	"gitee.com/paycooplus/data_exporter/collector"
+	testings "gitee.com/paycooplus/data_exporter/testings"
 	"github.com/go-kit/log"
 	"os"
 	"strings"

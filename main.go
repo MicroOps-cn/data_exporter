@@ -16,8 +16,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	"gitee.com/paycooplus/data-exporter/collector"
-	"gitee.com/paycooplus/data-exporter/config"
+	"gitee.com/paycooplus/data_exporter/collector"
+	"gitee.com/paycooplus/data_exporter/config"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"

@@ -1,4 +1,4 @@
-module gitee.com/paycooplus/data-exporter
+module gitee.com/paycooplus/data_exporter
 
 require (
 	github.com/beevik/etree v1.1.0
