@@ -30,7 +30,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 	tt.Logf("当前路径: %s", wd)
 	sc := NewConfig()
 	tt.AssertNoError(sc.ReloadConfig("../examples/data_exporter.yaml", log.NewLogfmtLogger(os.Stdout)))
-	tt.AssertEqual(len(sc.C.Collects), 2)
+	tt.AssertEqual(len(sc.C.Collects), 4)
 	for _, collect := range sc.C.Collects {
 		for _, ds := range collect.Datasource {
 			tt.AssertNotEqual(len(ds.Type), 0)
