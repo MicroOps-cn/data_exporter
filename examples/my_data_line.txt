@@ -1,2 +1,2 @@
-@[server5]/cpu=12/memory=14359738368/hostname=database2/ip=3.3.3.3! # database2监控数据
-@[server6]/cpu=16/memory=34359738368/ip=4.4.4.4/hostname=gateway-server2!  # gateway-server2监控数据
+@[server5]/ts=1631959031547/cpu=12/memory=14359738368/hostname=database2/ip=3.3.3.3! # database2监控数据
+@[server6]/time=2021-09-18 17:49:39/cpu=16/memory=34359738368/ip=4.4.4.4/hostname=gateway-server2!  # gateway-server2监控数据

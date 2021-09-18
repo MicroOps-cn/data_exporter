@@ -94,12 +94,13 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
-	var dds [][]byte
+	names := mc.Match.datapointRegexp.SubexpNames()
+	var dds [][][]byte
 	if mc.Match.datapointRegexp != nil {
-		dds = mc.Match.datapointRegexp.FindAll(data, -1)
+		dds = mc.Match.datapointRegexp.FindAllSubmatch(data, -1)
 		level.Debug(logger).Log("msg", "regexp match - datapoint", "data", string(data), "exp", mc.Match.datapointRegexp, "result", len(dds))
 	} else {
-		dds = [][]byte{data}
+		dds = [][][]byte{{data}}
 	}
 	for _, dd := range dds {
 		var (
@@ -109,11 +110,27 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
 			}
 		)
+		if len(names) > 1 {
+			for idx, name := range names[1:] {
+				m.Labels.Append(name, string(dd[idx+1]))
+			}
+		}
 		for name, labelRegexp := range mc.Match.labelsRegexp {
-			val := labelRegexp.Find(dd)
-			level.Debug(logger).Log("msg", "regexp match - label", "data", string(dd), "exp", labelRegexp, "result", string(val), "label", name)
+			dp := string(dd[0])
+			val := labelRegexp.FindStringSubmatch(dp)
+			level.Debug(logger).Log("msg", "regexp match - label", "data", dp, "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
 			if len(val) > 0 {
-				m.Labels.Append(name, string(val))
+				labelNames := labelRegexp.SubexpNames()
+				if len(labelNames) > 1 {
+					for idx, labelName := range labelNames[1:] {
+						if labelName == name {
+							m.Labels.Append(name, val[idx+1])
+							break
+						}
+					}
+				} else {
+					m.Labels.Append(name, val[0])
+				}
 			}
 		}
 		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)

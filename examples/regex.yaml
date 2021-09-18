@@ -1,0 +1,45 @@
+collects:
+  - name: "正则匹配-2"
+    data_format: "regex"
+    relabel_configs:
+      - target_label: __namespace__
+        replacement: "node_server"
+    datasource:
+      - type: "file"
+        url: "../examples/my_data_line.txt"
+    metrics:
+      - name: regex - info
+        relabel_configs:
+          - target_label: __name__
+            replacement: info
+          - target_label: __time_format__
+            replacement: "2006-01-02 15:04:05"
+          - target_label: __value__
+            replacement: "1"
+        match:
+          datapoint: '@\[(?P<name>[^[]+)]/time=(?P<__time__>[-\d :]+)/.+/ip=(?P<ip>[\d.]+)/hostname=(?P<hostname>.+?)!'
+        metric_type: gauge
+      - name: regex - memory
+        relabel_configs:
+          - target_label: __name__
+            replacement: memory
+        match:
+          datapoint: '@\[(?P<name>.+?)].*/ts=(?P<__time__>[0-9]+)/.*!'
+          labels:
+            __value__: memory=(?P<__value__>[\d]+)
+        metric_type: gauge
+      - name: regex - cpu
+        relabel_configs:
+          - source_labels: [ __raw__ ]
+            regex: .*cpu=(\d+).*
+            target_label: __value__
+          - source_labels: [ __raw__ ]
+            regex: .*@\[(.+?)].*
+            target_label: name
+          - target_label: __name__
+            replacement: cpu
+        match:
+          datapoint: '@.*!'
+          labels:
+            __raw__: .*
+        metric_type: gauge

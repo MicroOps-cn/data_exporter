@@ -83,9 +83,9 @@ collects:
     - `__namespace__`、`__subsystem__`、`__name__`使用下划线进行连接，组成metric的fqDN（metric name）
 - `__value__`: 必选， metric值
 - `__time_format__`、`__time__`
-    - `__time_format__`的值为可选项
-    - `__time__` 的值为必选项
-    - `__time__` 的值为unix（秒、毫秒或纳秒）时间戳(字符串)时，不需要指定`__time_format__`
+  - `__time_format__`的值为可选项
+  - `__time__` 的值为可选项，如果只为空或未匹配到时间戳，则对应的metric数据不会携带时间
+  - `__time__` 的值为unix（秒、毫秒或纳秒）时间戳(字符串)时，不需要指定`__time_format__`
     - `__time__` 的值为 RFC3339Nano（兼容RFC3339）格式的时间字符串时，不需要指定`__time_format__`
     - `__time__` 的值为其它格式的时间字符串时，需要指定`__time_format__`（参考 [go源代码](https://golang.org/src/time/format.go) ）
 - `__help__`: 可选，Metric帮助信息
@@ -281,7 +281,7 @@ match: # 匹配规则
 
 ### xml
 
-基于etree库进行xml解析，
+基于 [etree库](https://github.com/beevik/etree) 进行xml解析，
 
 - 配置:
 
@@ -297,13 +297,12 @@ match: # 匹配规则
 ```
 
 - 配置说明
-    - `datapoint`: 使用etree.Element.FindElements进行文档查找，
-    - `labels`: 使用go template语法，进行数据解析，元数据为etree.Element对象
+  - `datapoint`: 使用 [etree.Element.FindElements](https://github.com/beevik/etree#path-queries) 进行文档查找，
+  - `labels`: 使用go template语法，进行数据解析，元数据为 [etree.Element](https://pkg.go.dev/github.com/beevik/etree#Element) 对象
 
 # regex
 
 Perl语法的正则表达式匹配
-
 ```yaml
 - name: "server cpu"
   relabel_configs:
@@ -322,3 +321,18 @@ Perl语法的正则表达式匹配
 ```
 
 - 如果想跨行匹配，需要使用`(?s:.+)`这种方式，标记`s`为让`.`支持换行(`\n`)
+
+#### 命名分组匹配
+
+```yaml
+- name: regex - memory
+  relabel_configs:
+    - target_label: __name__
+      replacement: memory
+  match:
+    datapoint: '@\[(?P<name>.+?)].*/ts=(?P<__time__>[0-9]+)/.*!'
+    labels:
+      __value__: memory=(?P<__value__>[\d]+)
+```
+
+- labels使用命名匹配时，需要名称和label名称一致，否则会匹配到整个结果

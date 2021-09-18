@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -101,6 +102,98 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
 			mc.GetMetricByXml(logger, []byte(xmlContent), mc.RelabelConfigs, metrics)
+			close(metrics)
+		}()
+		for metric := range metrics {
+			m, err := metric.getMetric()
+			AssertNoError(t, err)
+			dtoMetric := dto.Metric{}
+			AssertNoError(t, m.Write(&dtoMetric))
+			fmt.Println(dtoMetric.String())
+		}
+	}
+}
+
+var textContent = `
+@[server5]/cpu=12/memory=14359738368/ip=3.3.3.3/hostname=database2! # database2监控数据
+@[server6]/cpu=16/memory=34359738368/ip=4.4.4.4/hostname=gateway-server2!  # gateway-server2监控数据
+`
+
+func TestMetricConfig_GetMetricByRegex(t *testing.T) {
+	var err error
+	mcs := []MetricConfig{{
+		Name:       "info",
+		MetricType: Gauge,
+		RelabelConfigs: RelabelConfigs{&RelabelConfig{
+			TargetLabel: "__name__",
+			Action:      Replace,
+			Separator:   ";",
+			Regex:       MustNewRegexp(`(.*)`),
+			Replacement: "info",
+		}, &RelabelConfig{
+			TargetLabel: "__value__",
+			Action:      Replace,
+			Separator:   ";",
+			Regex:       MustNewRegexp(`(.*)`),
+			Replacement: "1",
+		}},
+		Match: MetricMatch{
+			Datapoint: "@\\[(?P<name>[^[]+)]/.+/ip=(?P<ip>[\\d.]+)/hostname=(?P<hostname>.+?)!",
+		},
+	}, {
+		Name:       "memory",
+		MetricType: Gauge,
+		RelabelConfigs: RelabelConfigs{&RelabelConfig{
+			TargetLabel: "__name__",
+			Action:      Replace,
+			Separator:   ";",
+			Regex:       MustNewRegexp(`(.*)`),
+			Replacement: "memory",
+		}},
+		Match: MetricMatch{
+			Datapoint: "@\\[(?P<name>.+?)].*!",
+			Labels: map[string]string{
+				"__value__": "memory=(?P<__value__>[\\d.]+)",
+			},
+		},
+	}, {
+		Name:       "cpu",
+		MetricType: Gauge,
+		RelabelConfigs: RelabelConfigs{&RelabelConfig{
+			SourceLabels: []model.LabelName{"__raw__"},
+			TargetLabel:  "__value__",
+			Action:       Replace,
+			Separator:    ";",
+			Regex:        MustNewRegexp(`.*cpu=([\d.]+).*`),
+			Replacement:  "$1",
+		}, &RelabelConfig{
+			SourceLabels: []model.LabelName{"__raw__"},
+			TargetLabel:  "name",
+			Action:       Replace,
+			Separator:    ";",
+			Regex:        MustNewRegexp(`.*@\[(.+?)].*`),
+			Replacement:  "$1",
+		}, &RelabelConfig{
+			TargetLabel: "__name__",
+			Action:      Replace,
+			Separator:   ";",
+			Regex:       MustNewRegexp(`(.*)`),
+			Replacement: "cpu",
+		}},
+		Match: MetricMatch{
+			Datapoint: "@.*!",
+			Labels: map[string]string{
+				"__raw__": `.*`,
+			},
+		},
+	}}
+	for _, mc := range mcs {
+		err = mc.BuildRegexp("")
+		AssertNoError(t, err)
+		metrics := make(chan Metric, 3)
+		logger := log.NewLogfmtLogger(os.Stderr)
+		go func() {
+			mc.GetMetricByRegex(logger, []byte(textContent), mc.RelabelConfigs, metrics)
 			close(metrics)
 		}()
 		for metric := range metrics {
