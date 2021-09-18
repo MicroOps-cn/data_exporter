@@ -9,7 +9,7 @@ make
 编译Docker镜像
 
 ```shell
-make && make common-docker
+make && docker build -t data_exporter:0.1.0 .
 ```
 
 ### 运行

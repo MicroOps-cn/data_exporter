@@ -1,12 +1,8 @@
-ARG ARCH="amd64"
-ARG OS="linux"
-FROM quay.io/prometheus/busybox-${OS}-${ARCH}:latest
+FROM quay.io/prometheus/busybox-linux-amd64:latest
 LABEL maintainer="MicroOps"
 
-ARG ARCH="amd64"
-ARG OS="linux"
-COPY .build/${OS}-${ARCH}/data_exporter  /bin/data_exporter
-COPY blackbox.yml       /etc/data_exporter/config.yml
+COPY data_exporter  /bin/data_exporter
+COPY examples       /etc/data_exporter/
 
 EXPOSE      9116
 ENTRYPOINT  [ "/bin/data_exporter" ]
