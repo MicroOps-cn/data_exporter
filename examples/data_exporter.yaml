@@ -3,8 +3,8 @@ collects:
     relabel_configs: [ ]
     data_format: "json"
     datasource:
-      - type: "file"
-        url: "../examples/my_data.json"
+      - type: "http"
+        url: "http://127.0.0.1:10101/my_data.json"
     metrics:
       - name: "Point1"
         relabel_configs:
@@ -133,8 +133,8 @@ collects:
         target_label: name
         regex: "#([^/]+).*"
     datasource:
-      - type: "file"
-        url: "../examples/my_data_line.txt"
+      - type: "http"
+        url: "http://127.0.0.1:10101/my_data_line.txt"
     metrics:
       - name: "server cpu"
         relabel_configs:

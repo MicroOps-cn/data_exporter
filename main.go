@@ -32,6 +32,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -44,11 +45,13 @@ var (
 	sc            = config.NewConfig()
 	exporterName  = config.ExporterName
 	webConfig     = webflag.AddFlags(kingpin.CommandLine)
-	listenAddress = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9115").String()
+	listenAddress = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9116").String()
 	configFile    = kingpin.Flag("config.file", "Blackbox exporter configuration file.").Default(exporterName + ".yaml").String()
 	routePrefix   = kingpin.Flag("web.route-prefix", "Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").PlaceHolder("<path>").String()
 	configCheck   = kingpin.Flag("config.check", "If true validate the config file and then exit.").Default().Bool()
 	externalURL   = kingpin.Flag("web.external-url", "The URL under which Blackbox exporter is externally reachable (for example, if Blackbox exporter is served via a reverse proxy). Used for generating relative and absolute links back to Blackbox exporter itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by Blackbox exporter. If omitted, relevant URL components will be derived automatically.").PlaceHolder("<url>").String()
+	enablePprof   = kingpin.Flag("pprof.enable", "Enable pprof").Bool()
+	pprofUrl      = kingpin.Flag("pprof.url", "pprof url prefix").Default("/-/pprof/").String()
 )
 
 func main() {
@@ -119,13 +122,13 @@ func run() int {
 		}
 	}()
 
+	serve := http.NewServeMux()
 	// Match Prometheus behaviour and redirect over externalURL for root path only
 	// if routePrefix is different than "/"
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	serve.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-
-	http.HandleFunc(path.Join(*routePrefix, "/-/reload"),
+	serve.HandleFunc(path.Join(*routePrefix, "/-/reload"),
 		func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "POST" {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -140,15 +143,31 @@ func run() int {
 			}
 		})
 
-	http.HandleFunc(path.Join(*routePrefix, "/metrics"), func(writer http.ResponseWriter, request *http.Request) {
+	serve.HandleFunc(path.Join(*routePrefix, "/metrics"), func(writer http.ResponseWriter, request *http.Request) {
 		collectMetrics(logger, writer, request)
 	})
 
-	http.HandleFunc(path.Join(*routePrefix, "/-/healthy"), func(w http.ResponseWriter, r *http.Request) {
+	serve.HandleFunc(path.Join(*routePrefix, "/-/healthy"), func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Healthy"))
 	})
-	srv := &http.Server{Addr: *listenAddress}
+	if *enablePprof {
+		pprofPrefix := path.Join(*routePrefix, *pprofUrl) + "/"
+		serve.HandleFunc(pprofPrefix, func(w http.ResponseWriter, r *http.Request) {
+			name := strings.TrimPrefix(r.URL.Path, pprofPrefix)
+			if name == "" {
+				r.URL.Path += "/"
+			} else if name != "/" {
+				r.URL.Path = path.Join("/debug/pprof/", name)
+			}
+			pprof.Index(w, r)
+		})
+		serve.HandleFunc(path.Join(*routePrefix, *pprofUrl, "cmdline"), pprof.Cmdline)
+		serve.HandleFunc(path.Join(*routePrefix, *pprofUrl, "profile"), pprof.Profile)
+		serve.HandleFunc(path.Join(*routePrefix, *pprofUrl, "symbol"), pprof.Symbol)
+		serve.HandleFunc(path.Join(*routePrefix, *pprofUrl, "trace"), pprof.Trace)
+	}
+	srv := &http.Server{Addr: *listenAddress, Handler: serve}
 	srvc := make(chan struct{})
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
