@@ -1,7 +1,15 @@
 ### 编译
 
+通用
+
 ```shell
 make 
+```
+
+编译Docker镜像
+
+```shell
+make && make common-docker
 ```
 
 ### 运行
@@ -63,7 +71,7 @@ collects:
 
 ### 流程
 
-![img.png](examples/img.png)
+![img.png](docs/images/img.png)
 
 ### Labels
 

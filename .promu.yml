@@ -14,6 +14,5 @@ build:
     -X github.com/prometheus/common/version.BuildDate={{date "20060102-15:04:05"}}
 tarball:
   files:
-    - blackbox.yml
+    - examples
     - LICENSE
-    - NOTICE
