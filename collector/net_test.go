@@ -149,7 +149,9 @@ func runServ(t *testings.T, protocol, addr string, tlsConfig *tls.Config) io.Clo
 				for {
 					var data [4096]byte
 					n, addr, err := conn.ReadFromUDP(data[:]) // 接收数据
-					t.AssertNoError(err)
+					if err != nil && assert.Contains(t.T, err.Error(), "use of closed network connection") {
+						break
+					}
 					if strings.TrimSpace(string(data[:n])) == "get_data" {
 						for _, s := range strings.Split(exampleData, "\n") {
 							t.Logf("[%s]返回监控数据: %s\n", addr, s)
@@ -161,6 +163,7 @@ func runServ(t *testings.T, protocol, addr string, tlsConfig *tls.Config) io.Clo
 						}
 					}
 				}
+				t.Logf("[S]listen closed %s", addr)
 			}()
 			return conn
 		}
