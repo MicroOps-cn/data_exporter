@@ -14,6 +14,7 @@
 package testings
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -21,10 +22,11 @@ import (
 
 type T struct {
 	*testing.T
+	context.Context
 }
 
 func NewTesting(t *testing.T) *T {
-	return &T{T: t}
+	return &T{T: t, Context: context.Background()}
 }
 func (t *T) AssertNoError(args ...interface{}) {
 	for _, arg := range args {
@@ -46,12 +48,33 @@ func (t *T) LogAndAssertNoError(args ...interface{}) {
 }
 
 func (t *T) AssertEqual(expected, actual interface{}, msgAndArgs ...interface{}) {
-	if !assert.Equal(t.T, expected, actual, msgAndArgs) {
+	if !assert.Equal(t.T, expected, actual, msgAndArgs...) {
 		os.Exit(1)
 	}
 }
 func (t *T) AssertNotEqual(expected, actual interface{}, msgAndArgs ...interface{}) {
-	if !assert.NotEqual(t.T, expected, actual, msgAndArgs) {
+	if !assert.NotEqual(t.T, expected, actual, msgAndArgs...) {
+		os.Exit(1)
+	}
+}
+func (t *T) Containsf(s, contains interface{}, msg string, args ...interface{}) {
+	if !assert.Containsf(t.T, s, contains, msg, args...) {
+		os.Exit(1)
+	}
+}
+func (t *T) Contains(s, contains interface{}, args ...interface{}) {
+	if !assert.Contains(t.T, s, contains, args...) {
+		os.Exit(1)
+	}
+}
+func (t *T) NotContainsf(s, contains interface{}, msg string, args ...interface{}) {
+	if !assert.NotContainsf(t.T, s, contains, msg, args...) {
+		os.Exit(1)
+	}
+}
+
+func (t *T) NotContains(s, contains interface{}, msgAndArgs ...interface{}) {
+	if !assert.NotContains(t.T, s, contains, msgAndArgs...) {
 		os.Exit(1)
 	}
 }

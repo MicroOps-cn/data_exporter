@@ -44,7 +44,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 var yamlConfigContent = `
 collects:
-- name: "test-http"
+- name: "test-file"
   relabel_configs: 
     - source_labels: [__name__,"name"]
       target_label: name
@@ -97,7 +97,7 @@ func TestLoadConfig(t *testing.T) {
 	tt.AssertEqual(len(sc.C.Collects), 1)
 	collect := sc.C.Collects[0]
 	tt.AssertEqual(collect.DataFormat, collector.Json)
-	tt.AssertEqual(collect.Name, "test-http")
+	tt.AssertEqual(collect.Name, "test-file")
 
 	tt.AssertEqual(len(collect.RelabelConfigs), 1)
 	relabelConfig := collect.RelabelConfigs[0]

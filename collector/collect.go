@@ -14,8 +14,7 @@
 package collector
 
 import (
-	"bufio"
-	"bytes"
+	"context"
 	"fmt"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
@@ -25,6 +24,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type DataFormat string
@@ -36,8 +36,8 @@ func (d DataFormat) ToLower() DataFormat {
 var (
 	collectErrorCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "data_collect_error_count",
-		Help: "Blackbox exporter config loaded successfully.",
-	}, []string{"type"})
+		Help: "datasource or metric collect error count",
+	}, []string{"type", "name"})
 )
 
 func RegisterCollector(reg prometheus.Registerer) {
@@ -51,7 +51,7 @@ const (
 	Yaml  DataFormat = "yaml"
 )
 
-type Collect struct {
+type CollectConfig struct {
 	Name           string
 	RelabelConfigs RelabelConfigs `yaml:"relabel_configs"`
 	DataFormat     DataFormat     `yaml:"data_format"`
@@ -85,8 +85,8 @@ func xmlPathCompile(pathStr string, require bool, point string) (*etree.Path, er
 	}
 }
 
-func (c *Collect) UnmarshalYAML(value *yaml.Node) error {
-	type plain Collect
+func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
+	type plain CollectConfig
 	if err := value.Decode((*plain)(c)); err != nil {
 		return err
 	} else {
@@ -107,105 +107,102 @@ func (c *Collect) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (c *Collect) Describe(_ chan<- *prometheus.Desc) {
-}
-
-func (c *Collect) Collect(proMetrics chan<- prometheus.Metric) {
-	//fmt.Println("Collect")
-	metrics := make(chan Metric, 10)
-	go func() {
-		for _, ds := range c.Datasource {
-			var f = func(data []byte) {
-				for _, mc := range c.Metrics {
-					logger := log.With(mc.logger, "datasource", ds.Name)
-					level.Debug(logger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
-					rcs := append(append(c.RelabelConfigs, ds.RelabelConfigs...), mc.RelabelConfigs...)
-					switch c.DataFormat.ToLower() {
-					case Regex:
-						mc.GetMetricByRegex(logger, data, rcs, metrics)
-					case Json:
-						mc.GetMetricByJson(logger, data, rcs, metrics)
-					case Xml:
-						mc.GetMetricByXml(logger, data, rcs, metrics)
-					case Yaml:
-						mc.GetMetricByYaml(logger, data, rcs, metrics)
-					}
-				}
+func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds *Datasource, metrics chan<- Metric) {
+	defer func() {
+		if r := recover(); r != nil {
+			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
+		}
+	}()
+	ctx, cancel := context.WithTimeout(ctx, ds.Timeout)
+	defer cancel()
+	logger = log.With(c.logger, "datasource", ds.Name)
+	ctx = context.WithValue(ctx, "logger", logger)
+	rcs := append(c.RelabelConfigs, ds.RelabelConfigs...)
+	if ds.ReadMode == StreamLine {
+		err := func() error {
+			stream, err := ds.GetLineStream(ctx)
+			if err != nil {
+				return err
 			}
-			if ds.ReadMode == StreamLine {
-				err := func() error {
-					stream, err := ds.getStream()
-					if err != nil {
+			defer stream.Close()
+			var line []byte
+			for {
+				line, err = stream.ReadLine()
+				if err != nil {
+					if io.EOF != err {
 						return err
 					}
-					var readCount int64
-					defer stream.Close()
-					buf := bufio.NewReader(stream)
-					var lineBuf, line []byte
-					var isPrefix bool
-					for {
-						line, isPrefix, err = buf.ReadLine()
-						if err != nil {
-							if io.EOF != err {
-								return err
-							}
-							return nil
-						}
-						lineBuf = append(lineBuf, line...)
-						if !isPrefix && len(lineBuf) > 0 {
-							f(lineBuf)
-							lineBuf = nil
-						}
-						readCount += int64(len(line))
-						if readCount > ds.MaxContentLength {
-							if len(lineBuf) > 0 {
-								f(lineBuf)
-							}
-							return nil
-						}
-					}
-				}()
-				if err != nil {
-					collectErrorCount.WithLabelValues("datasource").Inc()
-					level.Error(c.logger).Log("msg", "Failed to read data.", "err", err)
+					return nil
 				}
-			} else {
-				data, err := ds.getData()
-				if err != nil {
-					collectErrorCount.WithLabelValues("datasource").Inc()
-					level.Error(c.logger).Log("msg", "Failed to get datasource.", "err", err)
-					continue
-				}
-				if ds.ReadMode == Line {
-					buf := bufio.NewReader(bytes.NewBuffer(data))
-					var lineBuf, line []byte
-					var isPrefix bool
-					for {
-						line, isPrefix, err = buf.ReadLine()
-						if err != nil {
-							if io.EOF != err {
-								collectErrorCount.WithLabelValues("datasource").Inc()
-								level.Error(c.logger).Log("msg", "Failed to read data.", "err", err)
-							}
-							break
-						}
-						lineBuf = append(lineBuf, line...)
-						if !isPrefix && len(lineBuf) > 0 {
-							f(append(lineBuf, line...))
-							lineBuf = nil
-						}
-					}
-				} else {
-					f(data)
-				}
+				c.GetMetric(logger, line, rcs, metrics)
 			}
+		}()
+		if err != nil {
+			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
+			level.Error(logger).Log("msg", "Failed to read data.", "err", err)
 		}
+	} else {
+		data, err := ds.ReadAll(ctx)
+		if err != nil {
+			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
+			level.Error(c.logger).Log("msg", "Failed to get datasource.", "err", err)
+			return
+		}
+		c.GetMetric(logger, data, rcs, metrics)
+	}
+}
+func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+	for _, mc := range c.Metrics {
+
+		rcs = append(append(rcs, mc.RelabelConfigs...))
+		logger = log.With(logger, "metric", mc.Name)
+		level.Debug(logger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
+		switch c.DataFormat.ToLower() {
+		case Regex:
+			mc.GetMetricByRegex(logger, data, rcs, metrics)
+		case Json:
+			mc.GetMetricByJson(logger, data, rcs, metrics)
+		case Xml:
+			mc.GetMetricByXml(logger, data, rcs, metrics)
+		case Yaml:
+			mc.GetMetricByYaml(logger, data, rcs, metrics)
+		}
+	}
+}
+
+func (c *CollectConfig) SetLogger(logger log.Logger) {
+	c.logger = log.With(logger, "collect", c.Name)
+	for i := range c.Metrics {
+		c.Metrics[i].SetLogger(c.logger)
+	}
+}
+
+type CollectContext struct {
+	*CollectConfig
+	context.Context
+}
+
+func (c *CollectContext) Describe(_ chan<- *prometheus.Desc) {
+}
+
+func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
+	metrics := make(chan Metric, 10)
+	go func() {
+		wg := sync.WaitGroup{}
+		wg.Add(len(c.Datasource))
+		for i := range c.Datasource {
+			go func(idx int) {
+				defer wg.Done()
+				c.GetMetricByDs(c.Context, c.logger, c.Datasource[idx], metrics)
+			}(i)
+		}
+		wg.Wait()
 		close(metrics)
 	}()
 	for metric := range metrics {
 		m, err := metric.getMetric()
 		if err != nil {
-			collectErrorCount.WithLabelValues("datasource").Inc()
+			collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
 			level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
 		} else {
 			proMetrics <- m
@@ -213,11 +210,4 @@ func (c *Collect) Collect(proMetrics chan<- prometheus.Metric) {
 	}
 }
 
-func (c *Collect) SetLogger(logger log.Logger) {
-	c.logger = log.With(logger, "collect", c.Name)
-	for i := range c.Metrics {
-		c.Metrics[i].SetLogger(logger)
-	}
-}
-
-type Collects []Collect
+type Collects []CollectConfig

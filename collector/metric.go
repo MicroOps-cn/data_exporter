@@ -179,7 +179,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
-		collectErrorCount.WithLabelValues("metric").Inc()
+		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse xml data.", "err", err)
 		return
 	}
@@ -201,7 +201,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 		for name, labelMatch := range mc.Match.labelsTmpl {
 			val, err := labelMatch.Execute(elem)
 			if err != nil {
-				collectErrorCount.WithLabelValues("metric").Inc()
+				collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 				level.Error(logger).Log("msg", "failed to parse xml data: failed to execute template.", "err", err)
 				continue
 			}
@@ -222,7 +222,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 
 func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
 	if jsonData, err := yamlToJson(data, nil); err != nil {
-		collectErrorCount.WithLabelValues("metric").Inc()
+		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse yaml data.", "err", err, "yaml", data)
 	} else {
 		level.Debug(logger).Log("msg", "YAML转JSON", "json", string(jsonData), "yaml", data)

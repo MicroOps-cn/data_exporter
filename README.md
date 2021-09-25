@@ -42,14 +42,14 @@ curl 127.0.0.1:9116/metrics
 collects:
   - name: "test-http"
     relabel_configs: [ ]
-    data_format: "json"
+    data_format: "json" # 原数据格式/数据匹配模式
     datasource:
       - type: "file"
         url: "../examples/my_data.json"
       - type: "http"
         url: "https://localhost/examples/my_data.json"
         relabel_configs: [ ]
-    metrics:
+    metrics: # metric 匹配规则
       - name: "Point1"
         relabel_configs: # 根据匹配到数据及标签，进行二次处理，和Prometheus的relabel_configs用法一致
           - source_labels: [ __name__ ]
@@ -73,14 +73,107 @@ collects:
 
 ![img.png](docs/images/img.png)
 
-### Labels
+### 数据源
 
-总体遵循prometheus的规范, 几个特殊的label
+#### file
+
+```yaml
+datasource:
+  - type: "file"
+    name: <string> # 数据源名称
+    max_content_length: <int> # 读取最大长度，单位为字节，默认为102400000
+    relabel_configs: [ <relabel_config>, ... ] # 参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+    timeout: <duration>  # 默认为30s，不能小于1ms，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+    read_mode: <string> # 读取模式，stream-line|full-text，默认为full-text
+    url: "../examples/weather.xml"
+```
+
+#### http
+
+```yaml
+datasource:
+  - type: "http"
+    name: <string> # 数据源名称
+    max_content_length: <int> # 读取最大长度，单位为字节，默认为102400000
+    relabel_configs: [ <relabel_config>, ... ] # 参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+    timeout: <duration>  # 默认为30s，不能小于1ms，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+    read_mode: <string> # 读取模式，stream-line|full-text，默认为full-text
+    url: "http://127.0.0.1:2001/weather.xml"
+    http:
+      # HTTP basic 认证信息
+      basic_auth:
+        username: <string>
+        password: <secret>
+        password_file: <string>
+      # `Authorization` 头配置
+      authorization:
+        type: <string> # 类型，默认为 Bearer
+        credentials: <secret>
+        credentials_file: <filename>
+      oauth2: <oauth2> # oauth2配置，参考文档: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#oauth2
+      proxy_url: <string> # 代理地址
+      follow_redirects: <bool> # 是否跟随重定向，默认为true
+      tls_config: <tls_config> # TLS配置 参考文档: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config
+      body: string # HTTP请求报文
+      headers: { <string>: <string>, ... } # 自定义HTTP头
+      method: <string> #HTTP请求方法 GET/POST/PUT...
+      valid_status_codes: [ <number>,... ] # 有效的状态码,默认为200~299
+```
+
+#### tcp
+
+```yaml
+datasource:
+  - type: "tcp"
+    name: <string> # 数据源名称
+    max_content_length: <int> # 读取最大长度，单位为字节，默认为102400000
+    relabel_configs: [ <relabel_config>, ... ] # 参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+    timeout: <duration>  # 默认为30s，不能小于1ms，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+    read_mode: <string> # 读取模式，stream-line|full-text，默认为full-text
+    url: "127.0.0.1:2001"
+    tcp:
+      tls_config: <tls_config> # TLS配置 参考文档: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config
+      send: # send的值类型可以为 string、[string,...]、{"msg": <string>,"delay": <duration>}、[{"msg": <string>,"delay": <duration>},...]
+        - msg: <string>  # 发送消息
+          delay: <duration>  # 发送后等待时间，默认为0，延迟总和不得大于timeout，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+      max_connect_time: <duration> # 最大建立连接的时长（不包含数据传输），如果超过该时间连接仍未建立成功，会返回失败。默认为3秒
+      max_transfer_time: <duration> # 报文传输最大时长，报文传输超过该时长，会停止继续读取并关闭连接。
+      end_of: # 报文结束标志，当读取到该标志，则会停止继续读取并关闭连接。报文为行缓冲，所以end_of的值不能为多行。
+```
+
+注：end_of和max_transfer_time用来控制关闭连接(报文传输完成)。当匹配到end_of的标志，或传输时间达到max_transfer_time的值，会关闭连接，停止接收数据，但不会抛出异常。
+建议主要使用end_of来控制，并增大max_transfer_time的值。
+
+#### udp
+
+```yaml
+datasource:
+  - type: "udp"
+    name: <string> # 数据源名称
+    max_content_length: <int> # 读取最大长度，单位为字节，默认为102400000
+    relabel_configs: [ <relabel_config>, ... ] # 参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+    timeout: <duration>  # 默认为30s，不能小于1ms，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+    read_mode: <string> # 读取模式，stream-line|full-text，默认为full-text
+    url: "127.0.0.1:2001"
+    udp:
+      send: # send的值类型可以为 string、[string,...]、{"msg": <string>,"delay": <duration>}、[{"msg": <string>,"delay": <duration>},...]
+        - msg: <string>  # 发送消息
+          delay: <duration>  # 发送后等待时间，默认为0，延迟总和不得大于timeout，参考https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
+      max_connect_time: <duration> # 最大建立连接的时长（不包含数据传输），如果超过该时间连接仍未建立成功，会返回失败。默认为3秒
+      max_transfer_time: <duration> # 报文传输最大时长，报文传输超过该时长，会停止继续读取并关闭连接。
+      end_of: # 报文结束标志，当读取到该标志，则会停止继续读取并关闭连接。报文为行缓冲，所以end_of的值不能为多行。
+```
+
+注: udp暂不支持TLS
+
+### Labels说明
+
+总体遵循prometheus的规范, 但包含几个额外的特殊的label:
 
 - `__namespace__`、`__subsystem__`、`__name__`
-    - `__namespace__`、`__subsystem__` 的值为可选项
-    - `__name__` 的值为必选项
-    - `__namespace__`、`__subsystem__`、`__name__`使用下划线进行连接，组成metric的fqDN（metric name）
+  - `__namespace__`、`__subsystem__` 的值为可选项
+  - `__name__` 的值为必选项
+  - `__namespace__`、`__subsystem__`、`__name__`使用下划线进行连接，组成metric的fqDN（metric name）
 - `__value__`: 必选， metric值
 - `__time_format__`、`__time__`
   - `__time_format__`的值为可选项
@@ -90,15 +183,21 @@ collects:
     - `__time__` 的值为其它格式的时间字符串时，需要指定`__time_format__`（参考 [go源代码](https://golang.org/src/time/format.go) ）
 - `__help__`: 可选，Metric帮助信息
 
-### 匹配语法
+### relabel_configs
+
+参考Prometheus官方文档 [relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
+
+### Metric匹配语法
 
 - datapoint: 数据点/块匹配，每一个数据点/块就是一个指标的原始数据
-    - 如果值为空，则匹配全部数据
+  - 如果值为空，则匹配全部数据
 - labels: map类型，key为label key, value为匹配到的label value，如果有多个结果，只会获取第一个结果
 
-### json
+### 数据匹配模式
 
-#### 示例
+#### json
+
+##### 示例
 
 - 数据
 
@@ -123,7 +222,6 @@ collects:
 ```
 
 - 配置
-
 ```yaml
 match: # 匹配规则
   datapoint: "data|@expand|@expand|@to_entries:name:value"
@@ -132,7 +230,7 @@ match: # 匹配规则
     __name__: "name"
 ```
 
-#### 说明
+##### 说明
 
 - 总体遵循 [gjson](https://gjson.dev/) 语法
 - 增加 modifiers: expand
@@ -140,10 +238,8 @@ match: # 匹配规则
 - 增加 modifiers: to_entries
     - 将map转换为array，具体说明见下文
 
-##### expand
-
+###### expand
 原始数据:
-
 ```json
 {
   "server1": {
@@ -162,7 +258,6 @@ match: # 匹配规则
 ```
 
 使用`@expand`展开后数据:
-
 ```json
 {
   "server1.metrics": {
@@ -176,7 +271,7 @@ match: # 匹配规则
 }
 ```
 
-##### to_entries
+###### to_entries
 
 原始数据:
 
@@ -198,7 +293,6 @@ match: # 匹配规则
 ```
 
 使用`@to_entries`展开后数据:
-
 ```json
 [
   {
@@ -223,7 +317,6 @@ match: # 匹配规则
 ```
 
 使用`@to_entries:name:val`展开后数据:
-
 ```json
 [
   {
@@ -248,7 +341,6 @@ match: # 匹配规则
 ```
 
 使用`@to_entries:-:val`展开后数据:
-
 ```json
 [
   {
@@ -267,7 +359,6 @@ match: # 匹配规则
 ```
 
 使用`@to_entries::-`展开后数据:
-
 ```json
 [
   "server1",
@@ -275,14 +366,13 @@ match: # 匹配规则
 ]
 ```
 
-### yaml
+#### yaml
 
 内部会将yaml转换为json，再进行处理，请参考json部分
 
-### xml
+#### xml
 
 基于 [etree库](https://github.com/beevik/etree) 进行xml解析，
-
 - 配置:
 
 ```yaml
@@ -300,7 +390,7 @@ match: # 匹配规则
   - `datapoint`: 使用 [etree.Element.FindElements](https://github.com/beevik/etree#path-queries) 进行文档查找，
   - `labels`: 使用go template语法，进行数据解析，元数据为 [etree.Element](https://pkg.go.dev/github.com/beevik/etree#Element) 对象
 
-# regex
+#### regex
 
 Perl语法的正则表达式匹配
 ```yaml
@@ -322,8 +412,7 @@ Perl语法的正则表达式匹配
 
 - 如果想跨行匹配，需要使用`(?s:.+)`这种方式，标记`s`为让`.`支持换行(`\n`)
 
-#### 命名分组匹配
-
+##### 命名分组匹配
 ```yaml
 - name: regex - memory
   relabel_configs:
@@ -334,5 +423,4 @@ Perl语法的正则表达式匹配
     labels:
       __value__: memory=(?P<__value__>[\d]+)
 ```
-
 - labels使用命名匹配时，需要名称和label名称一致，否则会匹配到整个结果

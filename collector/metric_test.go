@@ -14,7 +14,6 @@
 package collector
 
 import (
-	"fmt"
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/model"
@@ -109,7 +108,7 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 			AssertNoError(t, err)
 			dtoMetric := dto.Metric{}
 			AssertNoError(t, m.Write(&dtoMetric))
-			fmt.Println(dtoMetric.String())
+			t.Log(dtoMetric.String())
 		}
 	}
 }
@@ -201,7 +200,7 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 			AssertNoError(t, err)
 			dtoMetric := dto.Metric{}
 			AssertNoError(t, m.Write(&dtoMetric))
-			fmt.Println(dtoMetric.String())
+			t.Log(dtoMetric.String())
 		}
 	}
 }

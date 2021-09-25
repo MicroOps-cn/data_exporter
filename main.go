@@ -235,7 +235,10 @@ func collectMetrics(logger log.Logger, w http.ResponseWriter, r *http.Request) {
 	reg := prometheus.NewRegistry()
 	for idx := range conf.Collects {
 		conf.Collects[idx].SetLogger(logger)
-		reg.MustRegister(&conf.Collects[idx])
+		reg.MustRegister(&collector.CollectContext{
+			CollectConfig: &conf.Collects[idx],
+			Context:       r.Context(),
+		})
 	}
 	reg.MustRegister(
 		promcollectors.NewProcessCollector(promcollectors.ProcessCollectorOpts{}),
