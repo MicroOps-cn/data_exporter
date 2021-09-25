@@ -107,7 +107,9 @@ func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-const LoggerContextName = "_logger_"
+type ContextKey string
+
+var LoggerContextName ContextKey = "_logger_"
 
 func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds *Datasource, metrics chan<- Metric) {
 	defer func() {
