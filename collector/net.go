@@ -116,7 +116,7 @@ func (t *NetConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (t NetConfig) GetStream(ctx context.Context, _, targetURL, protocol string) (io.ReadCloser, error) {
-	logger, ok := ctx.Value("logger").(log.Logger)
+	logger, ok := ctx.Value(LoggerContextName).(log.Logger)
 	if !ok {
 		logger = log.NewNopLogger()
 	}

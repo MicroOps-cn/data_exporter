@@ -107,6 +107,8 @@ func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+const LoggerContextName = "_logger_"
+
 func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds *Datasource, metrics chan<- Metric) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -116,7 +118,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 	ctx, cancel := context.WithTimeout(ctx, ds.Timeout)
 	defer cancel()
 	logger = log.With(c.logger, "datasource", ds.Name)
-	ctx = context.WithValue(ctx, "logger", logger)
+	ctx = context.WithValue(ctx, LoggerContextName, logger)
 	rcs := append(c.RelabelConfigs, ds.RelabelConfigs...)
 	if ds.ReadMode == StreamLine {
 		err := func() error {
@@ -153,8 +155,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 }
 func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
 	for _, mc := range c.Metrics {
-
-		rcs = append(append(rcs, mc.RelabelConfigs...))
+		rcs = append(rcs, mc.RelabelConfigs...)
 		logger = log.With(logger, "metric", mc.Name)
 		level.Debug(logger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
 		switch c.DataFormat.ToLower() {
