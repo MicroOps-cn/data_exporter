@@ -68,8 +68,8 @@ func handlerConn(t *testings.T, conn connect, connId string) {
 }
 
 func createX509KeyPair(tt *testings.T) (string, string) {
-	tmpDir, err := os.MkdirTemp("", "test-data-")
-	tt.AssertNoError(err)
+	tmpDir := path.Join(os.TempDir(), fmt.Sprintf("test-data-%d", rand.Int63()))
+	tt.AssertNoError(os.MkdirAll(tmpDir, 0755))
 	certPath := path.Join(tmpDir, "cert.pem")
 	keyPath := path.Join(tmpDir, "key.pem")
 
