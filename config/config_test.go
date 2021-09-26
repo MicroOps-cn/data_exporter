@@ -21,8 +21,16 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
+func init() {
+	defaultTimeout, err := time.ParseDuration("30s")
+	if err != nil {
+		panic(err)
+	}
+	collector.DefaultTimeout = &defaultTimeout
+}
 func TestLoadConfigFromFile(t *testing.T) {
 	tt := testings.NewTesting(t)
 	wd, err := os.Getwd()

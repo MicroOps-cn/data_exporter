@@ -25,6 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 )
 
@@ -68,7 +69,14 @@ func (c *ConnReader) Read(p []byte) (n int, err error) {
 	}
 	startTime := time.Now()
 	defer func() {
-		c.availableTransferTime -= time.Now().Sub(startTime)
+		timeDelta := time.Now().Sub(startTime)
+		for {
+			oldBits := atomic.LoadInt64((*int64)(&c.availableTransferTime))
+			newBits := oldBits - int64(timeDelta)
+			if atomic.CompareAndSwapInt64((*int64)(&c.availableTransferTime), oldBits, newBits) {
+				break
+			}
+		}
 		close(ch)
 	}()
 	if c.buf.Err() != nil {
@@ -76,7 +84,7 @@ func (c *ConnReader) Read(p []byte) (n int, err error) {
 	}
 	if len(c.lineBuf) == 0 {
 		go func() {
-			timer := time.NewTimer(c.availableTransferTime)
+			timer := time.NewTimer(time.Duration(atomic.LoadInt64((*int64)(&c.availableTransferTime))))
 			select {
 			case <-timer.C:
 				c.Close()

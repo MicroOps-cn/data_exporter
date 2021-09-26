@@ -158,7 +158,7 @@ type Datasource struct {
 
 var (
 	DefaultHttpConfig = HTTPConfig{Method: "GET"}
-	DefaultTimeout    = kingpin.Flag("timeout", "Default timeout").Default("30s").Duration()
+	DefaultTimeout    = kingpin.Flag("datasource.default-timeout", "Default timeout").Default("30s").Duration()
 )
 
 func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
@@ -182,11 +182,11 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 				d.HTTPConfig = &DefaultHttpConfig
 			}
 		}
-		if d.Timeout == 0 {
+		if d.Timeout == time.Duration(0) {
 			d.Timeout = *DefaultTimeout
 		}
 		if d.Timeout < time.Millisecond {
-			return fmt.Errorf("timeout value cannot be less than 1 ms")
+			return fmt.Errorf("timeout value cannot be less than 1 ms: timeout=%s", d.Timeout)
 		}
 	}
 	return nil
