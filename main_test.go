@@ -15,8 +15,8 @@ package main
 
 import (
 	"bytes"
-	"gitee.com/paycooplus/data_exporter/collector"
-	"gitee.com/paycooplus/data_exporter/testings"
+	"github.com/MicroOps-cn/data_exporter/collector"
+	"github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/assert"
 	"io"

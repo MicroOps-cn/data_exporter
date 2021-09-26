@@ -22,7 +22,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"gitee.com/paycooplus/data_exporter/testings"
+	"github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/prometheus/common/config"
 	"github.com/stretchr/testify/assert"
 	"io"

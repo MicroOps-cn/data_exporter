@@ -15,7 +15,7 @@ package collector
 
 import (
 	"context"
-	"gitee.com/paycooplus/data_exporter/testings"
+	"github.com/MicroOps-cn/data_exporter/testings"
 	"io"
 	"testing"
 )
