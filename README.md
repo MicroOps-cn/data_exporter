@@ -1,10 +1,17 @@
+### 说明
+
+将多种来源(如http响应报文、本地文件、TCP响应报文、UDP响应报文)的Json、xml、yaml或其它格式的数据，解析为Prometheus metric数据。
+
 ### 编译
+
 通用
+
 ```shell
 make 
 ```
 
 编译Docker镜像
+
 ```shell
 make && docker build -t data_exporter:0.1.0 .
 ```
@@ -228,9 +235,9 @@ match: # 匹配规则
 
 - 总体遵循 [gjson](https://gjson.dev/) 语法
 - 增加 modifiers: expand
-    - 将map展开一层，具体说明见下文
+  - 将map展开一层，具体说明见下文
 - 增加 modifiers: to_entries
-    - 将map转换为array，具体说明见下文
+  - 将map转换为array，具体说明见下文
 
 ###### expand
 原始数据:
