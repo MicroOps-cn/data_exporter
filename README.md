@@ -1,13 +1,10 @@
 ### 编译
-
 通用
-
 ```shell
 make 
 ```
 
 编译Docker镜像
-
 ```shell
 make && docker build -t data_exporter:0.1.0 .
 ```
@@ -15,23 +12,20 @@ make && docker build -t data_exporter:0.1.0 .
 ### 运行
 
 - 常规启动
-
 ```shell
 ./data_exporter --config.file="data_exporter.yaml"
 ```
 
 - 调试配置文件
-
 ```shell
 ./data_exporter --config.file="data_exporter.yaml" --log.level=debug
 ```
 
 - 启动examples
-
 ```shell
 cd examples
 nohup python3 -m http.server -b 127.0.0.1 10101 &  # 启动一个http后台服务, 测试结束记得停止
-./data_exporter
+../data_exporter
 # 新窗口执行 
 curl 127.0.0.1:9116/metrics
 ```
