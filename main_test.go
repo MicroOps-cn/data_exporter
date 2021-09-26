@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 var yamlConfigContent = `
@@ -33,7 +34,7 @@ collects:
   data_format: "json"
   datasource:
     - type: "file"
-      url: "../examples/my_data.json"
+      url: "examples/my_data.json"
   metrics:
     - name: "Point1"
       metric_type: "counter"
@@ -66,8 +67,8 @@ collects:
       action: replace
   data_format: "xml"
   datasource:
-    - type: "file"
-      url: "../examples/weather.xml"
+    - type: "http"
+      url: ""
   metrics:
     - name: "weather - hour"
       match:
@@ -92,6 +93,13 @@ collects:
           __name__: "week"
 `
 
+func init() {
+	defaultTimeout, err := time.ParseDuration("30s")
+	if err != nil {
+		panic(err)
+	}
+	collector.DefaultTimeout = &defaultTimeout
+}
 func TestCollectMetrics(t *testing.T) {
 	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -103,10 +111,11 @@ func TestCollectMetrics(t *testing.T) {
 		defer f.Close()
 		tt.AssertNoError(io.Copy(w, f))
 	}))
+	time.Sleep(time.Second)
 	defer ts.Close()
 	sc.C.Collects[1].Datasource[0].Url = ts.URL
-	sc.C.Collects[1].Datasource[0].Type = collector.Http
 	sc.C.Collects[0].Datasource[0].Url = "examples/my_data.json"
+
 	req, err := http.NewRequest("GET", "", nil)
 	if err != nil {
 		t.Fatal(err)
