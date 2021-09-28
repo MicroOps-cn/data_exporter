@@ -1,40 +1,57 @@
-### 说明
+# Prometheus Common Data Exporter
 
-将多种来源(如http响应报文、本地文件、TCP响应报文、UDP响应报文)的Json、xml、yaml或其它格式的数据，解析为Prometheus metric数据。
+[![Docker Pulls](docs/images/docker.svg)][hub]
+[![Docker Pulls](docs/images/gitee.svg)][gitee]
+
+Prometheus Common Data Exporter 用于将多种来源(如http响应报文、本地文件、TCP响应报文、UDP响应报文)的Json、xml、yaml或其它格式的数据，解析为Prometheus metric数据。
+
+Prometheus Common Data Exporter is used to parse JSON, XML, yaml or other format data from multiple sources (such as
+HTTP response message, local file, TCP response message and UDP response message) into Prometheus metric data.
+
+[English](./README-en.md)  |  [简体中文](./README.md)
 
 ### 编译
 
-通用
+#### 通用
 
 ```shell
 make 
 ```
 
-编译Docker镜像
+#### 编译Docker镜像
 
 ```shell
-make && docker build -t data_exporter:0.1.0 .
+make && docker build -t data_exporter:0.2.0 .
 ```
 
 ### 运行
 
-- 常规启动
+#### 常规启动
+
 ```shell
 ./data_exporter --config.file="data_exporter.yaml"
 ```
 
-- 调试配置文件
+#### 调试配置文件
+
 ```shell
 ./data_exporter --config.file="data_exporter.yaml" --log.level=debug
 ```
 
-- 启动examples
+#### 启动examples
+
 ```shell
 cd examples
 nohup python3 -m http.server -b 127.0.0.1 10101 &  # 启动一个http后台服务, 测试结束记得停止
 ../data_exporter
 # 新窗口执行 
 curl 127.0.0.1:9116/metrics
+```
+
+#### 使用Docker运行
+
+```shell
+docker run --rm -d -p 9116:9116 --name data_exporter -v `pwd`:/etc/data_exporter/ microops/data_exporter:0.2.0 --config.file=/etc/data_exporter/config.yml
 ```
 
 ### 配置
@@ -180,8 +197,8 @@ datasource:
   - `__time_format__`的值为可选项
   - `__time__` 的值为可选项，如果只为空或未匹配到时间戳，则对应的metric数据不会携带时间
   - `__time__` 的值为unix（秒、毫秒或纳秒）时间戳(字符串)时，不需要指定`__time_format__`
-    - `__time__` 的值为 RFC3339Nano（兼容RFC3339）格式的时间字符串时，不需要指定`__time_format__`
-    - `__time__` 的值为其它格式的时间字符串时，需要指定`__time_format__`（参考 [go源代码](https://golang.org/src/time/format.go) ）
+  - `__time__` 的值为 RFC3339Nano（兼容RFC3339）格式的时间字符串时，不需要指定`__time_format__`
+  - `__time__` 的值为其它格式的时间字符串时，需要指定`__time_format__`（参考 [go源代码](https://golang.org/src/time/format.go) ）
 - `__help__`: 可选，Metric帮助信息
 
 ### relabel_configs
@@ -424,4 +441,9 @@ Perl语法的正则表达式匹配
     labels:
       __value__: memory=(?P<__value__>[\d]+)
 ```
+
 - labels使用命名匹配时，需要名称和label名称一致，否则会匹配到整个结果
+
+[hub]: https://hub.docker.com/layers/microops/data_exporter
+
+[gitee]: https://gitee.com/MicroOps/data_exporter
