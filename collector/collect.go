@@ -214,3 +214,18 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 }
 
 type Collects []CollectConfig
+
+func (c Collects) Get(name string) *CollectConfig {
+	for idx := range c {
+		if c[idx].Name == name {
+			return &c[idx]
+		}
+	}
+	return nil
+}
+
+func (c *Collects) SetLogger(logger log.Logger) {
+	for idx := range *c {
+		(*c)[idx].SetLogger(logger)
+	}
+}

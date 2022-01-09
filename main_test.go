@@ -15,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/MicroOps-cn/data_exporter/collector"
 	"github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/go-kit/log"
@@ -129,5 +130,38 @@ func TestCollectMetrics(t *testing.T) {
 	body := rr.Body.String()
 	assert.Contains(t, body, `weather_temperature_week{name="黑龙江",zone="china"} 18`)
 	assert.Contains(t, body, `weather_temperature_hour{name="吉林",zone="china"} 16`)
+	assert.Contains(t, body, `server_memory{name="server1"} 6.8719476736e+10`)
+}
+
+func TestCollectMetricsByName(t *testing.T) {
+	tt := testings.NewTesting(t)
+	logger := log.NewLogfmtLogger(os.Stdout)
+	reader := bytes.NewReader([]byte(yamlConfigContent))
+	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := os.Open("examples/weather.xml")
+		tt.AssertNoError(err)
+		defer f.Close()
+		tt.AssertNoError(io.Copy(w, f))
+	}))
+	time.Sleep(time.Second)
+	defer ts.Close()
+	sc.C.Collects[1].Datasource[0].Url = ts.URL
+	sc.C.Collects[0].Datasource[0].Url = "examples/my_data.json"
+
+	req, err := http.NewRequest("GET", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		collectMetricsByName(logger, "test-http", w, r)
+	})
+	handler.ServeHTTP(rr, req)
+	tt.AssertEqual(rr.Code, 200)
+	body := rr.Body.String()
+	fmt.Println(body)
+	assert.NotContains(t, body, `weather_temperature_week{name="黑龙江",zone="china"} 18`)
+	assert.NotContains(t, body, `weather_temperature_hour{name="吉林",zone="china"} 16`)
 	assert.Contains(t, body, `server_memory{name="server1"} 6.8719476736e+10`)
 }

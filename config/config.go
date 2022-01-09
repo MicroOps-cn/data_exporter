@@ -59,7 +59,7 @@ func NewConfig() *SafeConfig {
 	}
 }
 
-func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, _ log.Logger) (err error) {
+func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, logger log.Logger) (err error) {
 	var c = &Config{}
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
@@ -67,15 +67,19 @@ func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, _ log.Logger) (er
 	if err = decoder.Decode(c); err != nil {
 		return fmt.Errorf("error parsing config file: %s", err)
 	}
-
+	c.Collects.SetLogger(logger)
 	sc.Lock()
 	sc.C = c
 	sc.Unlock()
 	return nil
 }
 
+func (sc *SafeConfig) GetConfig() *Config {
+	sc.Lock()
+	defer sc.Unlock()
+	return sc.C
+}
 func (sc *SafeConfig) ReloadConfig(confFile string, logger log.Logger) (err error) {
-
 	defer func() {
 		if err != nil {
 			configReloadSuccess.Set(0)

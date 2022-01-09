@@ -105,6 +105,7 @@ func run() int {
 		for {
 			select {
 			case <-hup:
+				level.Info(logger).Log("msg", "Reload config from signal")
 				if err := sc.ReloadConfig(*configFile, logger); err != nil {
 					level.Error(logger).Log("msg", "Error reloading config", "err", err)
 					continue
@@ -123,19 +124,29 @@ func run() int {
 	}()
 
 	serve := http.NewServeMux()
-	// Match Prometheus behaviour and redirect over externalURL for root path only
-	// if routePrefix is different than "/"
+
 	serve.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, path.Join(*routePrefix, "/")) && strings.HasSuffix(r.URL.Path, "/metrics") {
+			rPath := strings.TrimPrefix(r.URL.Path, path.Join(*routePrefix, "/"))
+			if rPath == "metrics" {
+				collectMetrics(logger, w, r)
+				return
+			} else {
+				collectMetricsByName(logger, strings.TrimSuffix(rPath, "/metrics"), w, r)
+				return
+			}
+		}
 		http.NotFound(w, r)
 	})
+
 	serve.HandleFunc(path.Join(*routePrefix, "/-/reload"),
 		func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "POST" {
 				w.WriteHeader(http.StatusMethodNotAllowed)
-				fmt.Fprintf(w, "This endpoint requires a POST request.\n")
+				_, _ = fmt.Fprintf(w, "This endpoint requires a POST request.\n")
 				return
 			}
-
+			level.Info(logger).Log("msg", "Reload config from http api")
 			rc := make(chan error)
 			reloadCh <- rc
 			if err := <-rc; err != nil {
@@ -143,13 +154,9 @@ func run() int {
 			}
 		})
 
-	serve.HandleFunc(path.Join(*routePrefix, "/metrics"), func(writer http.ResponseWriter, request *http.Request) {
-		collectMetrics(logger, writer, request)
-	})
-
 	serve.HandleFunc(path.Join(*routePrefix, "/-/healthy"), func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Healthy"))
+		_, _ = w.Write([]byte("Healthy"))
 	})
 	if *enablePprof {
 		pprofPrefix := path.Join(*routePrefix, *pprofUrl) + "/"
@@ -228,13 +235,36 @@ func computeExternalURL(u, listenAddr string) (*url.URL, error) {
 	return eu, nil
 }
 
+func collectMetricsByName(logger log.Logger, name string, w http.ResponseWriter, r *http.Request) {
+	level.Debug(logger).Log("msg", "collect metrics by collect_name", "name", name)
+	conf := sc.GetConfig()
+	reg := prometheus.NewRegistry()
+
+	if collect := conf.Collects.Get(name); collect != nil {
+		reg.MustRegister(&collector.CollectContext{
+			CollectConfig: collect,
+			Context:       r.Context(),
+		})
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	handler := promhttp.HandlerFor(
+		prometheus.Gatherers{reg},
+		promhttp.HandlerOpts{
+			ErrorLog:            stdlog.New(log.NewStdlibAdapter(level.Error(logger)), "", 0),
+			ErrorHandling:       promhttp.ContinueOnError,
+			MaxRequestsInFlight: 10,
+			Registry:            reg,
+		},
+	)
+	handler.ServeHTTP(w, r)
+}
 func collectMetrics(logger log.Logger, w http.ResponseWriter, r *http.Request) {
-	sc.Lock()
-	conf := sc.C
-	sc.Unlock()
+	conf := sc.GetConfig()
 	reg := prometheus.NewRegistry()
 	for idx := range conf.Collects {
-		conf.Collects[idx].SetLogger(logger)
 		reg.MustRegister(&collector.CollectContext{
 			CollectConfig: &conf.Collects[idx],
 			Context:       r.Context(),
