@@ -15,11 +15,69 @@ package collector
 
 import (
 	"bytes"
+	"fmt"
+	"gopkg.in/yaml.v3"
+	"regexp"
+	"strconv"
+	"strings"
 	"text/template"
+	"time"
 )
 
 type Template struct {
 	*template.Template
+	original string
+}
+
+var safeFuncMap = template.FuncMap{
+	"toUpper": strings.ToUpper,
+	"toLower": strings.ToLower,
+	"title":   strings.Title,
+	"reReplaceAll": func(pattern, repl, text string) string {
+		re := regexp.MustCompile(pattern)
+		return re.ReplaceAllString(text, repl)
+	},
+	"now": time.Now,
+	"utcNow": func() time.Time {
+		return time.Now().UTC()
+	},
+	"parseInt": func(base, bitSize int, s string) int64 {
+		val, err := strconv.ParseInt(s, base, bitSize)
+		if err != nil {
+			panic(err)
+		}
+		return val
+	},
+	"parseFloat": func(bitSize int, s string) float64 {
+		val, err := strconv.ParseFloat(s, bitSize)
+		if err != nil {
+			panic(err)
+		}
+		return val
+	},
+	"formatInt": func(base int, i int64) string {
+		return strconv.FormatInt(i, base)
+	},
+	"formatFloat": func(fmt byte, prec, bitSize int, f float64) string {
+		return strconv.FormatFloat(f, fmt, prec, bitSize)
+	},
+	"toString": func(v interface{}) string {
+		return fmt.Sprintf("%v", v)
+	},
+
+	"trimSpace": strings.TrimSpace,
+	"trimLeft": func(cutset, s string) string {
+		return strings.TrimLeft(s, cutset)
+	},
+	"trimRight": func(cutset, s string) string {
+		return strings.TrimRight(s, cutset)
+	},
+	"trimPrefix": func(prefix, s string) string {
+		return strings.TrimPrefix(s, prefix)
+	},
+	"trimSuffix": func(suffix, s string) string {
+		return strings.TrimSuffix(s, suffix)
+	},
 }
 
 func (t *Template) Funcs(funcMap template.FuncMap) *Template {
@@ -43,9 +101,38 @@ func (t *Template) ExecuteTemplate(name string, data interface{}) ([]byte, error
 	return buf.Bytes(), nil
 }
 func NewTemplate(name string, text string) (*Template, error) {
-	if tmpl, err := template.New(name).Parse(text); err != nil {
+	if tmpl, err := template.New(name).Funcs(safeFuncMap).Parse(text); err != nil {
 		return nil, err
 	} else {
-		return &Template{Template: tmpl}, nil
+		return &Template{Template: tmpl, original: text}, nil
 	}
+}
+func MustNewTemplate(name string, text string) Template {
+	if tmpl, err := NewTemplate(name, text); err != nil {
+		panic(err)
+	} else {
+		return *tmpl
+	}
+}
+
+func (t Template) MarshalYAML() (interface{}, error) {
+	if t.original != "" {
+		return t.original, nil
+	}
+	return nil, nil
+}
+
+func (t *Template) UnmarshalYAML(value *yaml.Node) error {
+	var tmplStr string
+	if err := value.Decode(&tmplStr); err != nil {
+		return err
+	} else if len(tmplStr) != 0 {
+
+		if tmpl, err := NewTemplate("", tmplStr); err != nil {
+			return err
+		} else {
+			*t = *tmpl
+		}
+	}
+	return nil
 }

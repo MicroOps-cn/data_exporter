@@ -2,14 +2,14 @@
   "data": {
     "server1": {
       "metrics": {
-        "CPU": "16",
-        "Memory": 68719476736
+        "CPU": "0x10",
+        "Memory": "0x1000000000"
       }
     },
     "server2": {
       "metrics": {
-        "CPU": "8",
-        "Memory": 34359738368
+        "CPU": "0x10",
+        "Memory": "0x1000000000"
       }
     }
   },

@@ -50,6 +50,10 @@ collects:
           regex: "[^.]+\\.metrics\\.(.+)"
           replacement: "server_$1"
           action: replace
+        - source_labels: [__value__]
+          target_label: __value__
+          action: templexec
+          template: "{{ .|parseInt 0 64 }}"
       match:
         datapoint: "data|@expand|@expand|@to_entries:name:value"
         labels:

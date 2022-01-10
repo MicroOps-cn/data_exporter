@@ -85,11 +85,11 @@ collects:
             __name__: "name"
 ```
 
-### 流程
+### Process
 
 ![img.png](docs/images/img.png)
 
-### 数据源
+### datasource
 
 #### file
 
@@ -196,7 +196,7 @@ datasource:
 
 Note: UDP does not support TLS temporarily
 
-### Labels说明
+### Labels
 
 It generally follows the specification of Prometheus, but contains several additional special labels:
 
@@ -221,6 +221,63 @@ It generally follows the specification of Prometheus, but contains several addit
 
 Refer to the official Prometheus
 documentation: [relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
+
+Generally, the configuration syntax of `relabel_config` of Prometheus is followed, and action: `templexec` is added on
+the basis of `relabel_config` Used to perform template replacement
+#### templexec
+##### example
+- raw data
+```json
+{
+  "code": 0,
+  "data": {
+    "server1": {
+      "metrics": {
+        "CPU": "0x10",
+        "Memory": "0x1000000000"
+      }
+    }
+  }
+}
+```
+
+- config
+```yaml
+match: # 匹配规则
+  datapoint: "data|@expand|@expand|@to_entries:name:value"
+  labels:
+    __value__: "value"
+    __name__: "name"
+  relabel_configs:
+    - source_labels: [__value__]
+      target_label: __value__
+      action: templexec
+      template: "{{ .|parseInt 0 64 }}"
+```
+
+##### describe
+- Use the official library `text/template` for template replacement
+- Supported pipeline functions
+    - toUpper(text string) -> string
+    - toLower(text string) -> string
+    - title(text string) -> string
+    - reReplaceAll(pattern, repl, text string) -> string
+    - now() -> time.Time
+    - utcNow() -> time.Time
+    - parseInt(base, bitSize int, text string) -> int64
+    - parseFloat(bitSize int, text string) -> float64
+    - formatInt(base int, i int64) -> string
+    - formatFloat(fmt byte, prec, bitSize int, f int64) -> string
+    - toString(text string) -> string
+    - trimSpace(text string) -> string
+    - trimLeft(cutset, text string) -> string
+    - trimRight(cutset, text string) -> string
+    - trimPrefix(cutset, text string) -> string
+    - trimSuffix(cutset, text string) -> string
+    -
+- Usage examples
+    - Original string:"0x11", template: "{{ .|parseInt 0 64 }}", result: "17"
+    - Original string:" Name-Gateway ", template: '{{ .|trimSpace |trimLeft "Name-"|toLower }}', result: "gateway"
 
 ### Metric Matching syntax
 

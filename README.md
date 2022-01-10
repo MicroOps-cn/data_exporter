@@ -192,7 +192,7 @@ datasource:
   - `__namespace__`、`__subsystem__` 的值为可选项
   - `__name__` 的值为必选项
   - `__namespace__`、`__subsystem__`、`__name__`使用下划线进行连接，组成metric的fqDN（metric name）
-- `__value__`: 必选， metric值
+- `__value__`: 必选， metric值, 最终值应该为数值或者布尔值
 - `__time_format__`、`__time__`
   - `__time_format__`的值为可选项
   - `__time__` 的值为可选项，如果只为空或未匹配到时间戳，则对应的metric数据不会携带时间
@@ -202,8 +202,64 @@ datasource:
 - `__help__`: 可选，Metric帮助信息
 
 ### relabel_configs
-
 参考Prometheus官方文档 [relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
+总体遵循Prometheus的relabel_config的配置语法,  在relabel_config的基础上增加Action: templexec. 用于执行模板替换
+#### templexec
+##### 示例
+- 数据
+```json
+{
+  "code": 0,
+  "data": {
+    "server1": {
+      "metrics": {
+        "CPU": "0x10",
+        "Memory": "0x1000000000"
+      }
+    }
+  }
+}
+```
+
+- 配置
+```yaml
+match: # 匹配规则
+  datapoint: "data|@expand|@expand|@to_entries:name:value"
+  labels:
+    __value__: "value"
+    __name__: "name"
+  relabel_configs:
+    - source_labels: [__value__]
+      target_label: __value__
+      action: templexec
+      template: "{{ .|parseInt 0 64 }}"
+```
+
+##### 说明
+
+- 使用官方库text/template 进行模板替换
+- 支持的pipeline函数
+  - toUpper(text string) -> string
+  - toLower(text string) -> string
+  - title(text string) -> string
+  - reReplaceAll(pattern, repl, text string) -> string
+  - now() -> time.Time
+  - utcNow() -> time.Time
+  - parseInt(base, bitSize int, text string) -> int64
+  - parseFloat(bitSize int, text string) -> float64
+  - formatInt(base int, i int64) -> string
+  - formatFloat(fmt byte, prec, bitSize int, f int64) -> string
+  - toString(text string) -> string
+  - trimSpace(text string) -> string
+  - trimLeft(cutset, text string) -> string
+  - trimRight(cutset, text string) -> string
+  - trimPrefix(cutset, text string) -> string
+  - trimSuffix(cutset, text string) -> string
+
+- 用法举例
+  - 原始字符串:"0x11", 模板: "{{ .|parseInt 0 64 }}", 结果: "17"
+  - 原始字符串:" Name-Gateway ", 模板: '{{ .|trimSpace |trimLeft "Name-"|toLower }}', 结果: "gateway"
+
 
 ### Metric匹配语法
 

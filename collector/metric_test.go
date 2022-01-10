@@ -14,11 +14,13 @@
 package collector
 
 import (
+	"fmt"
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -134,7 +136,13 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 			Action:      Replace,
 			Separator:   ";",
 			Regex:       MustNewRegexp(`(.*)`),
-			Replacement: "1",
+			Replacement: "0x11",
+		}, &RelabelConfig{
+			TargetLabel:  "__value__",
+			Action:       TemplateExecute,
+			SourceLabels: model.LabelNames{"__value__"},
+			Separator:    ";",
+			Template:     MustNewTemplate("", `{{ .|parseInt 0 64 |toString }}`),
 		}},
 		Match: MetricMatch{
 			Datapoint: "@\\[(?P<name>[^[]+)]/.+/ip=(?P<ip>[\\d.]+)/hostname=(?P<hostname>.+?)!",
@@ -186,6 +194,7 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 			},
 		},
 	}}
+	fmt.Println(strconv.ParseBool("true"))
 	for _, mc := range mcs {
 		err = mc.BuildRegexp("")
 		AssertNoError(t, err)

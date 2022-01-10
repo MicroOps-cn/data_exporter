@@ -94,6 +94,7 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+	var err error
 	names := mc.Match.datapointRegexp.SubexpNames()
 	var dds [][][]byte
 	if mc.Match.datapointRegexp != nil {
@@ -134,7 +135,10 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 			}
 		}
 		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
-		m.Labels = rcs.Process(m.Labels)
+		if m.Labels, err = rcs.Process(m.Labels); err != nil {
+			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+			continue
+		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
@@ -154,7 +158,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 	} else {
 		jns = []gjson.Result{jn}
 	}
-
+	var err error
 	for _, j := range jns {
 		var (
 			m = Metric{
@@ -171,7 +175,11 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 			}
 		}
 		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
-		m.Labels = rcs.Process(m.Labels)
+
+		if m.Labels, err = rcs.Process(m.Labels); err != nil {
+			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+			continue
+		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
@@ -190,6 +198,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	} else {
 		elems = []*etree.Element{&doc.Element}
 	}
+	var err error
 	for _, elem := range elems {
 		var (
 			m = Metric{
@@ -214,7 +223,10 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 		}
 
 		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
-		m.Labels = rcs.Process(m.Labels)
+		if m.Labels, err = rcs.Process(m.Labels); err != nil {
+			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+			continue
+		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
@@ -252,6 +264,10 @@ func (m *Metric) getValue() (float64, error) {
 	val := strings.TrimSpace(m.Labels.Get(LabelMetricValue))
 	if val == "" {
 		return 0, fmt.Errorf("metric value is null")
+	} else if val == "true" {
+		return 1.0, nil
+	} else if val == "false" {
+		return 0.0, nil
 	}
 	return strconv.ParseFloat(val, 64)
 }

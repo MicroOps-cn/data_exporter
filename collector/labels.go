@@ -101,6 +101,8 @@ type Action string
 const (
 	// Replace performs a regex replacement.
 	Replace Action = "replace"
+	// TemplateExecute performs a template execute replacement.
+	TemplateExecute Action = "templexec"
 	// Keep drops targets for which the input does not match the regex.
 	Keep Action = "keep"
 	// Drop drops targets for which the input does match the regex.
@@ -123,6 +125,8 @@ type RelabelConfig struct {
 	Separator string `yaml:"separator,omitempty"`
 	// Regex against which the concatenation is matched.
 	Regex Regexp `yaml:"regex,omitempty"`
+	// Template perform the replacement according to the template
+	Template Template `yaml:"template,omitempty"`
 	// Modulus to take of the hash of concatenated values from the source labels.
 	Modulus uint64 `yaml:"modulus,omitempty"`
 	// TargetLabel is the label to which the resulting string is written in a replacement.
@@ -145,10 +149,16 @@ func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
 	if c.Regex.Regexp == nil {
 		c.Regex = MustNewRegexp("")
 	}
+	if c.Template.Template == nil {
+		c.Template = MustNewTemplate("", "")
+	}
+	if (c.Action == TemplateExecute) && c.Template.original == "" {
+		return fmt.Errorf("relabel configuration for %s action requires 'template' value", c.Action)
+	}
 	if c.Modulus == 0 && c.Action == HashMod {
 		return fmt.Errorf("relabel configuration for hashmod requires non-zero modulus")
 	}
-	if (c.Action == Replace || c.Action == HashMod) && c.TargetLabel == "" {
+	if (c.Action == Replace || c.Action == HashMod || c.Action == TemplateExecute) && c.TargetLabel == "" {
 		return fmt.Errorf("relabel configuration for %s action requires 'target_label' value", c.Action)
 	}
 	if c.Action == Replace && !relabelTarget.MatchString(c.TargetLabel) {
@@ -179,17 +189,18 @@ func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
 // are applied in order of input.
 // If a label set is dropped, nil is returned.
 // May return the input labelSet modified.
-func (rcs RelabelConfigs) Process(labels Labels) Labels {
+func (rcs RelabelConfigs) Process(labels Labels) (Labels, error) {
+	var err error
 	for _, rc := range rcs {
-		labels = relabel(labels, rc)
-		if labels == nil {
-			return nil
+		labels, err = relabel(labels, rc)
+		if labels == nil || err != nil {
+			return nil, err
 		}
 	}
-	return labels
+	return labels, nil
 }
 
-func relabel(lset Labels, cfg *RelabelConfig) Labels {
+func relabel(lset Labels, cfg *RelabelConfig) (Labels, error) {
 	values := make([]string, 0, len(cfg.SourceLabels))
 	for _, ln := range cfg.SourceLabels {
 		values = append(values, lset.Get(string(ln)))
@@ -201,12 +212,18 @@ func relabel(lset Labels, cfg *RelabelConfig) Labels {
 	switch cfg.Action {
 	case Drop:
 		if cfg.Regex.MatchString(val) {
-			return nil
+			return nil, nil
 		}
 	case Keep:
 		if !cfg.Regex.MatchString(val) {
-			return nil
+			return nil, nil
 		}
+	case TemplateExecute:
+		newVal, err := cfg.Template.Execute(val)
+		if err != nil {
+			return nil, fmt.Errorf("faile to execute template: %s,err: %s", cfg.Template.original, err)
+		}
+		lb.Set(cfg.TargetLabel, string(newVal))
 	case Replace:
 		indexes := cfg.Regex.FindStringSubmatchIndex(val)
 		// If there is no match no replacement must take place.
@@ -250,7 +267,7 @@ func relabel(lset Labels, cfg *RelabelConfig) Labels {
 		panic(fmt.Errorf("relabel: unknown relabel action type %q", cfg.Action))
 	}
 
-	return lb.Labels()
+	return lb.Labels(), nil
 }
 
 // sum64 sums the md5 hash to an uint64.
