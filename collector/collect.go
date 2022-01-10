@@ -115,6 +115,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 	defer func() {
 		if r := recover(); r != nil {
 			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
+			level.Error(logger).Log("msg", "Failed to get metrics from datasource.", "err", r)
 		}
 	}()
 	ctx, cancel := context.WithTimeout(ctx, ds.Timeout)
