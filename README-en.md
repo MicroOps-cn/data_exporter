@@ -87,7 +87,7 @@ collects:
 
 ### Process
 
-![img.png](docs/images/img.png)
+![img.png](docs/images/workflow.jpg)
 
 ### datasource
 
@@ -97,11 +97,15 @@ collects:
 datasource:
   - type: "file"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, defaults: 102400000
+    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
+    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
+    
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
-    read_mode: <string> # read mode, The value can be: "stream-line" or "full-text", defaults: "full-text"
+    read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
     url: "../examples/weather.xml"
+    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
+    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
 ```
 
 #### http
@@ -110,12 +114,13 @@ datasource:
 datasource:
   - type: "http"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, defaults: 102400000
+    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
+    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
-    read_mode: <string> # read mode, The value can be: "stream-line" or "full-text", defaults: "full-text"
+    read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
     url: "http://127.0.0.1:2001/weather.xml"
-    http:
+    config:
       # Optional HTTP basic authentication information.
       basic_auth:
         username: <string>
@@ -141,6 +146,8 @@ datasource:
       headers: { <string>: <string>, ... } # custom HTTP request headers
       method: <string> #HTTP request method, example: GET/POST/PUT...
       valid_status_codes: [ <number>,... ] # valid status code,default to 200~299.
+    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
+    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
 ```
 
 #### tcp
@@ -149,12 +156,13 @@ datasource:
 datasource:
   - type: "tcp"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, defaults: 102400000
+    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
+    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
-    read_mode: <string> # read mode, The value can be: "stream-line" or "full-text", defaults: "full-text"
+    read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
     url: "127.0.0.1:2001"
-    tcp:
+    config:
       # TLS configuration. reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config
       tls_config: <tls_config>
       send: # The value can be string、[string,...]、{"msg": <string>,"delay": <duration>}、[{"msg": <string>,"delay": <duration>},...]
@@ -164,7 +172,8 @@ datasource:
           delay: <duration>
       max_connect_time: <duration> # The maximum time to establish a connection (excluding data transmission). If the connection is not established successfully after this time, a failure will be returned. Default to 3s
       max_transfer_time: <duration> # Maximum message transmission time. If the message transmission exceeds this time, it will stop reading and close the connection. Default to 3s
-      end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so end_ The value of of cannot be multiple rows.
+    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
+    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
 ```
 
 Note: `end_of` and `max_transfer_time` is used to control closing the connection (message transmission is completed).
@@ -178,12 +187,13 @@ use `end_of` to control and increase the value of `max_transfer_time`.
 datasource:
   - type: "udp"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, defaults: 102400000
+    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
+    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
-    read_mode: <string> # read mode, The value can be: "stream-line" or "full-text", defaults: "full-text"
+    read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
     url: "127.0.0.1:2001"
-    udp:
+    config:
       send: # The value can be string、[string,...]、{"msg": <string>,"delay": <duration>}、[{"msg": <string>,"delay": <duration>},...]
         - msg: <string>  # message
           # The waiting time after sending is 0 by default, and the total delay must not be greater than timeout
@@ -191,7 +201,8 @@ datasource:
           delay: <duration>
       max_connect_time: <duration> # The maximum time to establish a connection (excluding data transmission). If the connection is not established successfully after this time, a failure will be returned. Default to 3s
       max_transfer_time: <duration> # Maximum message transmission time. If the message transmission exceeds this time, it will stop reading and close the connection. Default to 3s
-      end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so end_ The value of of cannot be multiple rows.
+    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
+    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
 ```
 
 Note: UDP does not support TLS temporarily
@@ -224,9 +235,13 @@ documentation: [relabel_config](https://prometheus.io/docs/prometheus/latest/con
 
 Generally, the configuration syntax of `relabel_config` of Prometheus is followed, and action: `templexec` is added on
 the basis of `relabel_config` Used to perform template replacement
+
 #### templexec
+
 ##### example
+
 - raw data
+
 ```json
 {
   "code": 0,
@@ -242,6 +257,7 @@ the basis of `relabel_config` Used to perform template replacement
 ```
 
 - config
+
 ```yaml
 match: # 匹配规则
   datapoint: "data|@expand|@expand|@to_entries:name:value"
@@ -249,7 +265,7 @@ match: # 匹配规则
     __value__: "value"
     __name__: "name"
   relabel_configs:
-    - source_labels: [__value__]
+    - source_labels: [ __value__ ]
       target_label: __value__
       action: templexec
       template: "{{ .|parseInt 0 64 }}"

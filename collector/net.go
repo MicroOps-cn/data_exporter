@@ -14,8 +14,6 @@
 package collector
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -30,80 +28,55 @@ import (
 )
 
 type ConnReader struct {
-	io.ReadWriteCloser
-	buf                   *bufio.Scanner
-	lineBuf               []byte
+	net.Conn
 	availableTransferTime time.Duration
+	maxTransferTime       time.Duration
 }
 
-func NewConnReader(conn io.ReadWriteCloser, transferTime time.Duration, endOf []byte) *ConnReader {
-	reader := &ConnReader{ReadWriteCloser: conn, buf: bufio.NewScanner(conn), availableTransferTime: transferTime}
-	reader.buf.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if len(endOf) > 0 {
-			if i := bytes.Index(data, endOf); i >= 0 {
-				return i + len(endOf), data[0 : i+len(endOf)], bufio.ErrFinalToken
-			}
-		}
-
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			// We have a full newline-terminated line.
-			return i + 1, data[0 : i+1], nil
-		}
-		// If we're at EOF, we have a final, non-terminated line. Return it.
-		if atEOF {
-			return len(data), data, nil
-		}
-		// Request more data.
-		return 0, nil, nil
-	})
-	return reader
+func NewConnReader(conn net.Conn, transferTime time.Duration) *ConnReader {
+	return &ConnReader{Conn: conn, availableTransferTime: transferTime, maxTransferTime: transferTime}
 }
 
 func (c *ConnReader) Read(p []byte) (n int, err error) {
-	ch := make(chan struct{})
-	if c.availableTransferTime <= 0 {
-		return 0, fmt.Errorf("transfer timeout")
-	}
-	startTime := time.Now()
-	defer func() {
-		timeDelta := time.Now().Sub(startTime)
-		for {
-			oldBits := atomic.LoadInt64((*int64)(&c.availableTransferTime))
-			newBits := oldBits - int64(timeDelta)
-			if atomic.CompareAndSwapInt64((*int64)(&c.availableTransferTime), oldBits, newBits) {
-				break
-			}
+	if c.maxTransferTime > 0 {
+		ch := make(chan struct{})
+		if c.availableTransferTime <= 0 {
+			return 0, fmt.Errorf("transfer timeout")
 		}
-		close(ch)
-	}()
-	if c.buf.Err() != nil {
-		return 0, c.buf.Err()
-	}
-	if len(c.lineBuf) == 0 {
+		startTime := time.Now()
+		// Transfer Timer
+		defer func() {
+			timeDelta := time.Now().Sub(startTime)
+			for {
+				oldTime := atomic.LoadInt64((*int64)(&c.availableTransferTime))
+				newTime := oldTime - int64(timeDelta)
+				if atomic.CompareAndSwapInt64((*int64)(&c.availableTransferTime), oldTime, newTime) {
+					break
+				}
+			}
+			close(ch)
+		}()
 		go func() {
 			timer := time.NewTimer(time.Duration(atomic.LoadInt64((*int64)(&c.availableTransferTime))))
 			select {
 			case <-timer.C:
 				c.Close()
 			case <-ch:
+				timer.Stop()
 			}
 		}()
-		if !c.buf.Scan() {
-			return 0, io.EOF
-		}
-		c.lineBuf = c.buf.Bytes()
 	}
-	n = copy(p, c.lineBuf)
-	c.lineBuf = c.lineBuf[n:]
-	return n, nil
+	return c.Conn.Read(p)
+}
+
+func NewNetConfig(protocol string) *NetConfig {
+	return &NetConfig{protocol: protocol}
 }
 
 type NetConfig struct {
+	protocol        string
 	Send            SendConfigs       `yaml:"send,omitempty"`
-	MaxTransferTime time.Duration     `yaml:"max_transfer_time"`
+	MaxTransferTime *time.Duration    `yaml:"max_transfer_time"`
 	MaxConnectTime  time.Duration     `yaml:"max_connect_time"`
 	TLSConfig       *config.TLSConfig `yaml:"tls_config,omitempty" json:"tls_config,omitempty"`
 	EndOf           string            `yaml:"end_of"`
@@ -115,20 +88,23 @@ func (t *NetConfig) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	if t.MaxConnectTime == 0 {
-		t.MaxTransferTime = time.Second * 3
+		t.MaxConnectTime = time.Second * 3
 	}
-	if t.MaxTransferTime == 0 {
-		t.MaxTransferTime = time.Second * 3
+	if t.protocol == "udp" && t.TLSConfig != nil {
+		return fmt.Errorf("unknown protocol: tls over %s ", t.protocol)
+	}
+	if t.protocol != "udp" && t.protocol != "tcp" {
+		return fmt.Errorf("unknown protocol: %s", t.protocol)
 	}
 	return nil
 }
 
-func (t NetConfig) GetStream(ctx context.Context, _, targetURL, protocol string) (io.ReadCloser, error) {
+func (t NetConfig) GetStream(ctx context.Context, _, targetURL string) (io.ReadCloser, error) {
 	logger, ok := ctx.Value(LoggerContextName).(log.Logger)
 	if !ok {
 		logger = log.NewNopLogger()
 	}
-	var conn io.ReadWriteCloser
+	var conn net.Conn
 	var err error
 	if t.TLSConfig != nil {
 		var tlsConfig *tls.Config
@@ -136,17 +112,17 @@ func (t NetConfig) GetStream(ctx context.Context, _, targetURL, protocol string)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load tls config: %s", err)
 		}
-		if protocol == "udp" {
-			err = fmt.Errorf("unknown protocol: tls over %s ", protocol)
-		} else if protocol == "tcp" {
+		if t.protocol == "udp" {
+			err = fmt.Errorf("unknown protocol: tls over %s ", t.protocol)
+		} else if t.protocol == "tcp" {
 			d := tls.Dialer{NetDialer: &net.Dialer{Timeout: t.MaxConnectTime}, Config: tlsConfig}
-			conn, err = d.DialContext(ctx, protocol, targetURL)
+			conn, err = d.DialContext(ctx, t.protocol, targetURL)
 		} else {
-			err = fmt.Errorf("unknown protocol: %s", protocol)
+			err = fmt.Errorf("unknown protocol: %s", t.protocol)
 		}
 	} else {
 		d := net.Dialer{Timeout: t.MaxConnectTime}
-		conn, err = d.DialContext(ctx, protocol, targetURL)
+		conn, err = d.DialContext(ctx, t.protocol, targetURL)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %s", err)
@@ -168,5 +144,5 @@ func (t NetConfig) GetStream(ctx context.Context, _, targetURL, protocol string)
 			//conn.Close()
 		}()
 	}
-	return NewConnReader(conn, t.MaxTransferTime, []byte(t.EndOf)), nil
+	return NewConnReader(conn, *t.MaxTransferTime), nil
 }

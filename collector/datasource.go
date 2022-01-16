@@ -14,15 +14,16 @@
 package collector
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	"github.com/MicroOps-cn/data_exporter/common"
 	"github.com/prometheus/common/config"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -31,21 +32,28 @@ import (
 type DatasourceType string
 
 const (
-	Http DatasourceType = "http"
-	File DatasourceType = "file"
-	Tcp  DatasourceType = "tcp"
-	Udp  DatasourceType = "udp"
+	Http  DatasourceType = "http"
+	Https DatasourceType = "https"
+	File  DatasourceType = "file"
+	Tcp   DatasourceType = "tcp"
+	Udp   DatasourceType = "udp"
 )
 
 func (d DatasourceType) ToLower() DatasourceType {
 	return DatasourceType(strings.ToLower(string(d)))
 }
+func (d DatasourceType) ToLowerString() string {
+	return strings.ToLower(string(d))
+}
 
 type DatasourceReadMode string
 
 const (
+	Line       DatasourceReadMode = "line"
+	Stream     DatasourceReadMode = "stream"
 	StreamLine DatasourceReadMode = "stream-line"
 	FullText   DatasourceReadMode = "full-text"
+	Full       DatasourceReadMode = "full"
 )
 
 func (d DatasourceReadMode) ToLower() DatasourceReadMode {
@@ -143,17 +151,30 @@ func (s *SendConfigs) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
+type Streamer interface {
+	GetStream(ctx context.Context, name, targetURL string) (io.ReadCloser, error)
+}
+
 type Datasource struct {
-	Name             string             `yaml:"name"`
-	Url              string             `yaml:"url"`
-	Type             DatasourceType     `yaml:"type"`
-	Timeout          time.Duration      `yaml:"timeout"`
-	ReadMode         DatasourceReadMode `yaml:"read_mode"`
-	HTTPConfig       *HTTPConfig        `yaml:"http"`
-	TCPConfig        *NetConfig         `yaml:"tcp"`
-	UDPConfig        *NetConfig         `yaml:"udp"`
-	RelabelConfigs   RelabelConfigs     `yaml:"relabel_configs"`
-	MaxContentLength int64              `yaml:"max_content_length"`
+	Name                 string             `yaml:"name"`
+	Url                  string             `yaml:"url"`
+	Type                 DatasourceType     `yaml:"type"`
+	Timeout              time.Duration      `yaml:"timeout"`
+	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs"`
+	MaxContentLength     *int64             `yaml:"max_content_length"`
+	LineMaxContentLength *int               `yaml:"line_max_content_length"`
+	LineSeparator        common.SliceString `yaml:"line_separator"`
+	r                    io.ReadCloser
+	EndOf                string             `yaml:"end_of"`
+	ReadMode             DatasourceReadMode `yaml:"read_mode"`
+	Config               Streamer           `yaml:"_config"`
+
+	// Deprecated
+	HTTPConfig *HTTPConfig `yaml:"http"`
+	// Deprecated
+	TCPConfig *NetConfig `yaml:"tcp"`
+	// Deprecated
+	UDPConfig *NetConfig `yaml:"udp"`
 }
 
 var (
@@ -161,25 +182,84 @@ var (
 	DefaultTimeout    = kingpin.Flag("datasource.default-timeout", "Default timeout").Default("30s").Duration()
 )
 
+const DefaultMaxContent = 102400000
+
 func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 	type plain Datasource
-	if err := value.Decode((*plain)(d)); err != nil {
+	type T struct {
+		Config *yaml.Node `yaml:"config"`
+		*plain `yaml:",inline"`
+	}
+	obj := &T{plain: (*plain)(d)}
+	if err := value.Decode(obj); err != nil {
 		return err
 	} else {
-		if d.MaxContentLength <= 0 {
-			d.MaxContentLength = 102400000
-		}
 		d.ReadMode = d.ReadMode.ToLower()
-		if d.ReadMode == "" {
-			d.ReadMode = FullText
+		switch d.ReadMode {
+		case "", FullText:
+			d.ReadMode = Full
+		case StreamLine:
+			d.ReadMode = Line
+		case Stream, Line, Full:
+		default:
+			return fmt.Errorf("read_type value ( %s ) is error", d.ReadMode)
 		}
-		if d.ReadMode == "stream" || d.ReadMode == "line" {
-			d.ReadMode = StreamLine
+		if d.Type == "" {
+			if u, err := url.Parse(d.Url); err == nil {
+				if u.Scheme != "" {
+					d.Type = DatasourceType(u.Scheme)
+				}
+			}
 		}
 		switch d.Type {
-		case Http:
-			if d.HTTPConfig == nil {
-				d.HTTPConfig = &DefaultHttpConfig
+		case File:
+		case Http, Https:
+			d.Type = Http
+			if d.HTTPConfig != nil {
+				d.Config = d.HTTPConfig
+			} else if obj.Config != nil {
+				d.Config = new(HTTPConfig)
+				if err = obj.Config.Decode(d.Config); err != nil {
+					return nil
+				}
+			} else {
+				d.Config = &DefaultHttpConfig
+			}
+		case Tcp, Udp:
+			if d.Type == Tcp && d.TCPConfig != nil {
+				d.Config = d.TCPConfig
+			} else if d.Type == Udp && d.UDPConfig != nil {
+				d.Config = d.UDPConfig
+			} else {
+				d.Config = NewNetConfig(string(d.Type))
+				if obj.Config != nil {
+					if err = obj.Config.Decode(d.Config); err != nil {
+						return err
+					}
+				}
+			}
+			if len(d.Config.(*NetConfig).EndOf) > 0 && len(d.EndOf) == 0 {
+				d.EndOf = d.Config.(*NetConfig).EndOf
+			}
+			if d.Config.(*NetConfig).MaxTransferTime == nil {
+				d.Config.(*NetConfig).MaxTransferTime = new(time.Duration)
+				if d.ReadMode == Stream {
+					*d.Config.(*NetConfig).MaxTransferTime = 0
+				} else {
+					*d.Config.(*NetConfig).MaxTransferTime = time.Second * 3
+				}
+			}
+		default:
+			return fmt.Errorf("Unknown datasource type: %s. ", d.Type)
+		}
+		if d.LineMaxContentLength == nil {
+			d.LineMaxContentLength = new(int)
+			*d.LineMaxContentLength = DefaultMaxContent
+		}
+		if d.MaxContentLength == nil {
+			d.MaxContentLength = new(int64)
+			if d.ReadMode != Stream {
+				*d.MaxContentLength = DefaultMaxContent
 			}
 		}
 		if d.Timeout == time.Duration(0) {
@@ -188,48 +268,44 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 		if d.Timeout < time.Millisecond {
 			return fmt.Errorf("timeout value cannot be less than 1 ms: timeout=%s", d.Timeout)
 		}
+		if len(d.LineSeparator) == 0 {
+			d.LineSeparator = []string{"\n"}
+		}
 	}
 	return nil
 }
 
 func (d *Datasource) ReadAll(ctx context.Context) ([]byte, error) {
 	var reader io.Reader
-	rc, err := d.getStream(ctx)
+	rc, err := d.GetStream(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	reader = io.LimitReader(rc, d.MaxContentLength)
+	reader = io.LimitReader(rc, *d.MaxContentLength)
 	return ioutil.ReadAll(reader)
 }
 
-func (d *Datasource) GetLineStream(ctx context.Context) (ReadLineCloser, error) {
-	rc, err := d.getStream(ctx)
+func (d *Datasource) GetLineStream(ctx context.Context) (common.ReadLineCloser, error) {
+	rc, err := d.GetStream(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &ReadLineClose{
-		Closer: rc,
-		buf:    bufio.NewScanner(io.LimitReader(rc, d.MaxContentLength)),
-	}, nil
+	if d.MaxContentLength == nil {
+		d.MaxContentLength = new(int64)
+		*d.MaxContentLength = DefaultMaxContent
+	}
+	if d.LineMaxContentLength == nil {
+		d.LineMaxContentLength = new(int)
+		*d.LineMaxContentLength = DefaultMaxContent
+	}
+	return common.NewLineBuffer(rc, *d.MaxContentLength, *d.LineMaxContentLength, d.LineSeparator, []byte(d.EndOf)), nil
 }
 
-func (d *Datasource) getStream(ctx context.Context) (io.ReadCloser, error) {
+func (d *Datasource) GetStream(ctx context.Context) (io.ReadCloser, error) {
 	switch d.Type.ToLower() {
-	case Http:
-		if body, err := d.HTTPConfig.GetStream(ctx, d.Name, d.Url); err != nil {
-			return nil, fmt.Errorf("Request URL %s failed: %s. ", d.Url, err)
-		} else {
-			return body, nil
-		}
-	case Tcp:
-		if body, err := d.TCPConfig.GetStream(ctx, d.Name, d.Url, string(d.Type)); err != nil {
-			return nil, fmt.Errorf("Request URL %s failed: %s. ", d.Url, err)
-		} else {
-			return body, nil
-		}
-	case Udp:
-		if body, err := d.UDPConfig.GetStream(ctx, d.Name, d.Url, string(d.Type)); err != nil {
+	case Http, Tcp, Udp:
+		if body, err := d.Config.GetStream(ctx, d.Name, d.Url); err != nil {
 			return nil, fmt.Errorf("Request URL %s failed: %s. ", d.Url, err)
 		} else {
 			return body, nil
@@ -244,20 +320,8 @@ func (d *Datasource) getStream(ctx context.Context) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("unknown datasource type: %s", d.Type)
 	}
 }
-
-type ReadLineCloser interface {
-	io.Closer
-	ReadLine() ([]byte, error)
-}
-type ReadLineClose struct {
-	io.Closer
-	buf *bufio.Scanner
-}
-
-func (r *ReadLineClose) ReadLine() ([]byte, error) {
-	if r.buf.Scan() {
-		return r.buf.Bytes(), nil
-	} else {
-		return nil, io.EOF
+func (d *Datasource) Close() {
+	if d.r != nil {
+		d.r.Close()
 	}
 }

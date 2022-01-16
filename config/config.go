@@ -14,6 +14,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/collector"
 	"github.com/go-kit/log"
@@ -25,10 +26,6 @@ import (
 )
 
 const ExporterName string = "data_exporter"
-
-type Config struct {
-	Collects collector.Collects `yaml:"collects"`
-}
 
 var (
 	configReloadSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -46,6 +43,26 @@ var (
 
 func RegisterCollector(reg prometheus.Registerer) {
 	reg.MustRegister(configReloadSuccess, configReloadSeconds)
+}
+
+type Config struct {
+	Collects   collector.Collects `yaml:"collects"`
+	cancelFunc context.CancelFunc
+	ctx        context.Context
+}
+
+func (c *Config) Init(logger log.Logger) error {
+	c.Collects.SetLogger(logger)
+	return c.Collects.StartStreamCollect(c.ctx)
+}
+
+func (c *Config) UnmarshalYAML(value *yaml.Node) error {
+	type plain Config
+	if err := value.Decode((*plain)(c)); err != nil {
+		return err
+	}
+	c.ctx, c.cancelFunc = context.WithCancel(context.Background())
+	return nil
 }
 
 type SafeConfig struct {
@@ -67,13 +84,27 @@ func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, logger log.Logger
 	if err = decoder.Decode(c); err != nil {
 		return fmt.Errorf("error parsing config file: %s", err)
 	}
-	c.Collects.SetLogger(logger)
+
+	if err = c.Init(logger); err != nil {
+		return fmt.Errorf("error init config: %s", err)
+	}
+	if sc.C != nil {
+		sc.C.Collects.StopStreamCollect()
+		if sc.C.cancelFunc != nil {
+			sc.C.cancelFunc()
+		}
+	}
 	sc.Lock()
 	sc.C = c
 	sc.Unlock()
 	return nil
 }
 
+func (sc *SafeConfig) SetConfig(conf *Config) {
+	sc.Lock()
+	defer sc.Unlock()
+	sc.C = conf
+}
 func (sc *SafeConfig) GetConfig() *Config {
 	sc.Lock()
 	defer sc.Unlock()

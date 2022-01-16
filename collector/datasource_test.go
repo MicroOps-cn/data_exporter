@@ -23,7 +23,7 @@ import (
 func TestReadLineClose(t *testing.T) {
 	tt := testings.NewTesting(t)
 	var maxContentLength int64 = 110
-	ds := Datasource{ReadMode: StreamLine, Url: "../examples/my_data.txt", MaxContentLength: maxContentLength, Type: File}
+	ds := Datasource{ReadMode: StreamLine, Url: "../examples/my_data.txt", MaxContentLength: &maxContentLength, Type: File}
 	stream, err := ds.GetLineStream(context.TODO())
 	tt.AssertNoError(err)
 	defer stream.Close()
@@ -48,7 +48,7 @@ func TestReadLineClose(t *testing.T) {
 func TestReadAll(t *testing.T) {
 	tt := testings.NewTesting(t)
 	var maxContentLength int64 = 110
-	ds := Datasource{ReadMode: StreamLine, Url: "../examples/my_data.txt", MaxContentLength: maxContentLength, Type: File}
+	ds := Datasource{ReadMode: Line, Url: "../examples/my_data.txt", MaxContentLength: &maxContentLength, Type: File}
 	all, err := ds.ReadAll(context.TODO())
 	tt.AssertNoError(err)
 	if int64(len(all)-1) != maxContentLength && int64(len(all)) != maxContentLength {

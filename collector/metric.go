@@ -22,8 +22,10 @@ import (
 	"github.com/tidwall/gjson"
 	"gopkg.in/yaml.v3"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -93,7 +95,7 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	var err error
 	names := mc.Match.datapointRegexp.SubexpNames()
 	var dds [][][]byte
@@ -105,7 +107,8 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 	}
 	for _, dd := range dds {
 		var (
-			m = Metric{
+			m = MetricGenerator{
+				logger:     logger,
 				MetricType: mc.MetricType,
 				Name:       mc.Name,
 				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
@@ -143,7 +146,7 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 		metrics <- m
 	}
 }
-func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	jn := gjson.ParseBytes(data)
 	if len(mc.Match.Datapoint) != 0 {
 		jn = jn.Get(mc.Match.Datapoint)
@@ -161,7 +164,8 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 	var err error
 	for _, j := range jns {
 		var (
-			m = Metric{
+			m = MetricGenerator{
+				logger:     logger,
 				MetricType: mc.MetricType,
 				Name:       mc.Name,
 				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
@@ -184,7 +188,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 		metrics <- m
 	}
 }
-func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
@@ -201,7 +205,8 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	var err error
 	for _, elem := range elems {
 		var (
-			m = Metric{
+			m = MetricGenerator{
+				logger:     logger,
 				MetricType: mc.MetricType,
 				Name:       mc.Name,
 				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
@@ -232,7 +237,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	}
 }
 
-func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	if jsonData, err := yamlToJson(data, nil); err != nil {
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse yaml data.", "err", err, "yaml", data)
@@ -248,7 +253,7 @@ func (mc *MetricConfig) SetLogger(logger log.Logger) {
 
 type MetricConfigs []*MetricConfig
 
-type Metric struct {
+type MetricGenerator struct {
 	MetricType MetricType
 	Labels     Labels
 	Datasource *Datasource
@@ -257,10 +262,10 @@ type Metric struct {
 	Name       string
 }
 
-func (m *Metric) getMetricName() string {
+func (m *MetricGenerator) getMetricName() string {
 	return strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(m.Labels.Get(LabelMetricName)))
 }
-func (m *Metric) getValue() (float64, error) {
+func (m *MetricGenerator) getValue() (float64, error) {
 	val := strings.TrimSpace(m.Labels.Get(LabelMetricValue))
 	if val == "" {
 		return 0, fmt.Errorf("metric value is null")
@@ -271,7 +276,21 @@ func (m *Metric) getValue() (float64, error) {
 	}
 	return strconv.ParseFloat(val, 64)
 }
-func (m *Metric) getMetric() (prometheus.Metric, error) {
+
+func (m *MetricGenerator) getOpts() (prometheus.Opts, error) {
+	opts := prometheus.Opts{}
+
+	opts.Name = m.getMetricName()
+	if opts.Name == "" {
+		return opts, fmt.Errorf(`"%s" is not a valid metric name`, opts.Name)
+	}
+	opts.Namespace = m.Labels.Get(LabelMetricNamespace)
+	opts.Subsystem = m.Labels.Get(LabelMetricSubsystem)
+	opts.Help = m.Labels.Get(LabelMetricHelp)
+	return opts, nil
+}
+
+func (m *MetricGenerator) getMetric() (prometheus.Metric, error) {
 	opts := prometheus.Opts{}
 
 	opts.Name = m.getMetricName()
@@ -311,7 +330,7 @@ func (m *Metric) getMetric() (prometheus.Metric, error) {
 	}
 }
 
-func (m *Metric) getTime() time.Time {
+func (m *MetricGenerator) getTime() time.Time {
 	timeStr := m.Labels.Get(LabelMetricTime)
 	timeFormat := m.Labels.Get(LabelMetricTimeFormat)
 	if len(timeStr) != 0 {
@@ -336,4 +355,71 @@ func (m *Metric) getTime() time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+type MetricGroup struct {
+	metrics map[string]prometheus.Collector
+	mux     sync.Mutex
+}
+
+func (mg *MetricGroup) handle(mgr MetricGenerator) error {
+	opts, err := mgr.getOpts()
+	if err != nil {
+		return err
+	}
+	fqName := prometheus.BuildFQName(opts.Namespace, opts.Subsystem, opts.Name)
+	labelKeys := mgr.Labels.WithoutEmpty().WithoutLabels().Keys()
+	sort.Strings(labelKeys)
+	metricHash := string(mgr.MetricType.ToLower()) + "\x00" + fqName + "\x00" + strings.Join(labelKeys, "\x00")
+
+	labels := mgr.Labels.WithoutEmpty().WithoutLabels().Map()
+	value, err := mgr.getValue()
+	if err != nil {
+		return err
+	}
+	if promMetric, ok := mg.metrics[metricHash]; ok && promMetric != nil {
+		switch mgr.MetricType.ToLower() {
+		case Gauge:
+			if counterVec, ok := promMetric.(*prometheus.GaugeVec); ok {
+				counterVec.With(labels).Set(value)
+			}
+		case Counter:
+			if counterVec, ok := promMetric.(*prometheus.CounterVec); ok {
+				counterVec.With(labels).Add(value)
+			}
+		default:
+			return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
+		}
+	} else {
+		switch mgr.MetricType.ToLower() {
+		case Gauge:
+			gaugeVec := prometheus.NewGaugeVec(prometheus.GaugeOpts(opts), labelKeys)
+			gaugeVec.With(labels).Set(value)
+			mg.createMetric(metricHash, gaugeVec)
+		case Counter:
+			counterVec := prometheus.NewCounterVec(prometheus.CounterOpts(opts), labelKeys)
+			counterVec.With(labels).Add(value)
+			if err != nil {
+				return err
+			}
+			mg.createMetric(metricHash, counterVec)
+		default:
+			return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
+		}
+	}
+	return nil
+}
+
+func (mg *MetricGroup) createMetric(metricHash string, collector prometheus.Collector) {
+	mg.mux.Lock()
+	defer mg.mux.Unlock()
+	mg.metrics[metricHash] = collector
+}
+
+func (mg *MetricGroup) Collect(metrics chan<- prometheus.Metric) {
+	mg.mux.Lock()
+	defer mg.mux.Unlock()
+	for _, metric := range mg.metrics {
+		metric.Collect(metrics)
+	}
 }

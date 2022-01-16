@@ -180,6 +180,10 @@ func TestUDPNetConfig(t *testing.T) {
 	testNetConfig(t, "udp", runServ)
 }
 
+func newInt64(v int64) *int64 {
+	return &v
+}
+
 func testNetTlsConfig(t *testing.T, network string, listenTls func(*testings.T, string, string, *tls.Config) io.Closer) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	tt := testings.NewTesting(t)
@@ -209,20 +213,20 @@ func testNetTlsConfig(t *testing.T, network string, listenTls func(*testings.T, 
 		Type:     DatasourceType(network),
 		Timeout:  time.Second * 30,
 		ReadMode: StreamLine,
-		TCPConfig: &NetConfig{
+		Config: &NetConfig{
 			Send: SendConfigs{SendConfig{
 				Msg: "get_data\n", Delay: 0,
 			}},
+			protocol:        network,
 			MaxConnectTime:  time.Second,
-			MaxTransferTime: time.Second * 5,
+			MaxTransferTime: (*time.Duration)(newInt64(int64(time.Second * 5))),
 			TLSConfig: &config.TLSConfig{
 				CAFile: certPath,
 			},
 			EndOf: "//",
 		},
-		MaxContentLength: 4096,
+		MaxContentLength: newInt64(4096),
 	}
-	ds.UDPConfig = ds.TCPConfig
 
 	func() {
 		t.Log("测试ReadLine: ")
@@ -270,10 +274,10 @@ func testNetConfig(t *testing.T, network string, listenFunc func(*testings.T, st
 				Msg: "get_data\n", Delay: 0,
 			}},
 			MaxConnectTime:  time.Second,
-			MaxTransferTime: time.Second * 5,
+			MaxTransferTime: (*time.Duration)(newInt64(int64(time.Second * 5))),
 			EndOf:           "//",
 		},
-		MaxContentLength: 4096,
+		MaxContentLength: newInt64(4096),
 	}
 	ds.UDPConfig = ds.TCPConfig
 	func() {

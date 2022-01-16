@@ -99,7 +99,7 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 	for _, mc := range mcs {
 		err = mc.BuildTemplate("")
 		AssertNoError(t, err)
-		metrics := make(chan Metric, 3)
+		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
 			mc.GetMetricByXml(logger, []byte(xmlContent), mc.RelabelConfigs, metrics)
@@ -198,7 +198,7 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 	for _, mc := range mcs {
 		err = mc.BuildRegexp("")
 		AssertNoError(t, err)
-		metrics := make(chan Metric, 3)
+		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
 			mc.GetMetricByRegex(logger, []byte(textContent), mc.RelabelConfigs, metrics)

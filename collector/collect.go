@@ -16,6 +16,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"github.com/MicroOps-cn/data_exporter/common"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -58,6 +59,7 @@ type CollectConfig struct {
 	Datasource     []*Datasource  `yaml:"datasource"`
 	Metrics        MetricConfigs  `yaml:"metrics"`
 	logger         log.Logger
+	metrics        MetricGroup
 }
 
 func regexCompile(regexStr string, require bool, point string) (*regexp.Regexp, error) {
@@ -103,6 +105,7 @@ func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
 				}
 			}
 		}
+		c.metrics.metrics = make(map[string]prometheus.Collector)
 	}
 	return nil
 }
@@ -111,7 +114,7 @@ type ContextKey string
 
 var LoggerContextName ContextKey = "_logger_"
 
-func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds *Datasource, metrics chan<- Metric) {
+func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds *Datasource, metrics chan<- MetricGenerator) {
 	defer func() {
 		if r := recover(); r != nil {
 			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
@@ -123,7 +126,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 	logger = log.With(c.logger, "datasource", ds.Name)
 	ctx = context.WithValue(ctx, LoggerContextName, logger)
 	rcs := append(c.RelabelConfigs, ds.RelabelConfigs...)
-	if ds.ReadMode == StreamLine {
+	if ds.ReadMode == Line {
 		err := func() error {
 			stream, err := ds.GetLineStream(ctx)
 			if err != nil {
@@ -146,7 +149,8 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
 			level.Error(logger).Log("msg", "Failed to read data.", "err", err)
 		}
-	} else {
+	} else if ds.ReadMode == Stream {
+	} else if ds.ReadMode == Full {
 		data, err := ds.ReadAll(ctx)
 		if err != nil {
 			collectErrorCount.WithLabelValues("datasource", ds.Name).Inc()
@@ -156,7 +160,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 		c.GetMetric(logger, data, rcs, metrics)
 	}
 }
-func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- Metric) {
+func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	for _, mc := range c.Metrics {
 		rcs = append(rcs, mc.RelabelConfigs...)
 		logger = log.With(logger, "metric", mc.Name)
@@ -181,8 +185,82 @@ func (c *CollectConfig) SetLogger(logger log.Logger) {
 	}
 }
 
+func (c *CollectConfig) StopStreamCollect() {
+	for i := range c.Datasource {
+		c.Datasource[i].Close()
+	}
+}
+
+func (c *CollectConfig) tailDsStream(ctx context.Context, ds *Datasource, stream common.ReadLineCloser, metrics chan<- MetricGenerator) {
+	defer stream.Close()
+	var line []byte
+	var err error
+	logger := log.With(c.logger, "datasource", ds.Name)
+	rcs := append(c.RelabelConfigs, ds.RelabelConfigs...)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			line, err = stream.ReadLine()
+			if err != nil {
+				stream.Close()
+				if stream, err = ds.GetLineStream(ctx); err != nil {
+
+				}
+			}
+			c.GetMetric(logger, line, rcs, metrics)
+		}
+	}
+}
+
+func (c *CollectConfig) StartStreamCollect(ctx context.Context) error {
+	metrics := make(chan MetricGenerator, 10)
+	for i := range c.Datasource {
+		if c.Datasource[i].ReadMode == Stream {
+			stream, err := c.Datasource[i].GetLineStream(ctx)
+			if err != nil {
+				level.Error(c.logger).Log("log", "failed to start stream collect", "err", err, "datasource", c.Datasource[i].Name)
+				return err
+			}
+			go func(ds *Datasource, buf common.ReadLineCloser) {
+				var e error
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						c.tailDsStream(ctx, ds, buf, metrics)
+					}
+					buf, err = ds.GetLineStream(ctx)
+					if e != nil {
+						level.Error(c.logger).Log("log", "failed to start stream collect", "err", err, "datasource", ds.Name)
+					}
+
+				}
+			}(c.Datasource[i], stream)
+		}
+	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				close(metrics)
+				return
+			case metric := <-metrics:
+				err := c.metrics.handle(metric)
+				if err != nil {
+					level.Info(metric.logger).Log("msg", "failed to parse metric", "err", err)
+				}
+			}
+		}
+	}()
+	return nil
+}
+
 type CollectContext struct {
 	*CollectConfig
+	cancelFunc context.CancelFunc
 	context.Context
 }
 
@@ -190,15 +268,17 @@ func (c *CollectContext) Describe(_ chan<- *prometheus.Desc) {
 }
 
 func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
-	metrics := make(chan Metric, 10)
+	metrics := make(chan MetricGenerator, 10)
 	go func() {
 		wg := sync.WaitGroup{}
-		wg.Add(len(c.Datasource))
 		for i := range c.Datasource {
-			go func(idx int) {
-				defer wg.Done()
-				c.GetMetricByDs(c.Context, c.logger, c.Datasource[idx], metrics)
-			}(i)
+			if c.Datasource[i].ReadMode != Stream {
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					c.GetMetricByDs(c.Context, c.logger, c.Datasource[idx], metrics)
+				}(i)
+			}
 		}
 		wg.Wait()
 		close(metrics)
@@ -212,6 +292,7 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 			proMetrics <- m
 		}
 	}
+	c.metrics.Collect(proMetrics)
 }
 
 type Collects []CollectConfig
@@ -228,5 +309,18 @@ func (c Collects) Get(name string) *CollectConfig {
 func (c *Collects) SetLogger(logger log.Logger) {
 	for idx := range *c {
 		(*c)[idx].SetLogger(logger)
+	}
+}
+func (c *Collects) StartStreamCollect(ctx context.Context) error {
+	for idx := range *c {
+		if err := (*c)[idx].StartStreamCollect(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (c *Collects) StopStreamCollect() {
+	for idx := range *c {
+		(*c)[idx].StopStreamCollect()
 	}
 }
