@@ -51,10 +51,7 @@ type LineBuffer struct {
 }
 
 func (r *LineBuffer) ReadLine() ([]byte, error) {
-	fmt.Println(">>>>>>>> scan", r, r.buf)
 	if r.buf.Scan() {
-
-		fmt.Println(">>>>>>>> scan", r, r.buf.Bytes())
 		return r.buf.Bytes(), nil
 	} else {
 		return nil, io.EOF

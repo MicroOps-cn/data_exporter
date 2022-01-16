@@ -60,7 +60,7 @@ func handlerConn(t *testings.T, conn connect, connId string) {
 				if err != nil {
 					break
 				}
-				time.Sleep(time.Second)
+				time.Sleep(time.Second / 2)
 			}
 		}
 	}
@@ -194,7 +194,6 @@ func testNetTlsConfig(t *testing.T, network string, listenTls func(*testings.T, 
 	tt.AssertNoError(err)
 	keyPem, err := ioutil.ReadFile(keyPath)
 	tt.AssertNoError(err)
-	//fmt.Println(string(certPem),string(keyPem))
 	cert, err := tls.X509KeyPair(certPem, keyPem)
 	tt.AssertNoError(err)
 
@@ -219,7 +218,7 @@ func testNetTlsConfig(t *testing.T, network string, listenTls func(*testings.T, 
 			}},
 			protocol:        network,
 			MaxConnectTime:  time.Second,
-			MaxTransferTime: (*time.Duration)(newInt64(int64(time.Second * 5))),
+			MaxTransferTime: (*time.Duration)(newInt64(int64(time.Second * 7))),
 			TLSConfig: &config.TLSConfig{
 				CAFile: certPath,
 			},
@@ -273,6 +272,7 @@ func testNetConfig(t *testing.T, network string, listenFunc func(*testings.T, st
 			Send: SendConfigs{SendConfig{
 				Msg: "get_data\n", Delay: 0,
 			}},
+			protocol:        network,
 			MaxConnectTime:  time.Second,
 			MaxTransferTime: (*time.Duration)(newInt64(int64(time.Second * 5))),
 			EndOf:           "//",
@@ -280,6 +280,7 @@ func testNetConfig(t *testing.T, network string, listenFunc func(*testings.T, st
 		MaxContentLength: newInt64(4096),
 	}
 	ds.UDPConfig = ds.TCPConfig
+	ds.Config = ds.TCPConfig
 	func() {
 		t.Log("测试ReadLine: ")
 		stream, err := ds.GetLineStream(tt.Context)

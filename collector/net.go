@@ -66,7 +66,11 @@ func (c *ConnReader) Read(p []byte) (n int, err error) {
 			}
 		}()
 	}
-	return c.Conn.Read(p)
+	data, err := c.Conn.Read(p)
+	if err != nil {
+		return data, io.EOF
+	}
+	return data, nil
 }
 
 func NewNetConfig(protocol string) *NetConfig {

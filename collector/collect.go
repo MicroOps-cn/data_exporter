@@ -204,10 +204,7 @@ func (c *CollectConfig) tailDsStream(ctx context.Context, ds *Datasource, stream
 		default:
 			line, err = stream.ReadLine()
 			if err != nil {
-				stream.Close()
-				if stream, err = ds.GetLineStream(ctx); err != nil {
-
-				}
+				return
 			}
 			c.GetMetric(logger, line, rcs, metrics)
 		}

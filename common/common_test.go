@@ -29,7 +29,7 @@ func TestNewLineBuffer(t *testing.T) {
 	tt.AssertNoError(err)
 	// Test lineSep LF(\n)
 	tt.AssertEqual("[server4]", string(line))
-	line, err = buf.ReadLine()
+	_, err = buf.ReadLine()
 	tt.AssertNoError(err)
 	line, err = buf.ReadLine()
 	tt.AssertNoError(err)
@@ -51,7 +51,7 @@ func TestNewLineBuffer(t *testing.T) {
 	tt.AssertNoError(err)
 	tt.AssertEqual("[serv", string(line))
 	for {
-		line, err = buf.ReadLine()
+		_, err = buf.ReadLine()
 		if err != nil {
 			if err == io.EOF {
 				break

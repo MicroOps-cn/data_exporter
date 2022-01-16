@@ -14,13 +14,11 @@
 package collector
 
 import (
-	"fmt"
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"os"
-	"strconv"
 	"testing"
 )
 
@@ -194,7 +192,6 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 			},
 		},
 	}}
-	fmt.Println(strconv.ParseBool("true"))
 	for _, mc := range mcs {
 		err = mc.BuildRegexp("")
 		AssertNoError(t, err)

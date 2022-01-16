@@ -165,12 +165,11 @@ func TestCollectMetricsByName(t *testing.T) {
 	}
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		collectMetricsByName(logger, "test-tcp-json", w, r)
+		collectMetricsByName(logger, "test-http", w, r)
 	})
 	handler.ServeHTTP(rr, req)
 	tt.AssertEqual(rr.Code, 200)
 	body := rr.Body.String()
-	fmt.Println(body)
 	assert.NotContains(t, body, `weather_temperature_week{name="黑龙江",zone="china"} 18`)
 	assert.NotContains(t, body, `weather_temperature_hour{name="吉林",zone="china"} 16`)
 	assert.Contains(t, body, `server_memory{name="server1"} 6.8719476736e+10`)
