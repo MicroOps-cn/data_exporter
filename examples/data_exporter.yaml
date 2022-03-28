@@ -1,6 +1,6 @@
 collects:
   - name: "test-http"
-    relabel_configs: [ ]
+    relabel_configs: []
     data_format: "json"
     datasource:
       - type: "http"
@@ -10,12 +10,12 @@ collects:
         relabel_configs:
           - target_label: __namespace__
             replacement: "node_server"
-          - source_labels: [ __name__ ]
+          - source_labels: [__name__]
             target_label: name
             regex: "([^.]+)\\.metrics\\..+"
             replacement: "$1"
             action: replace
-          - source_labels: [ __name__ ]
+          - source_labels: [__name__]
             target_label: __name__
             regex: "[^.]+\\.metrics\\.(.+)"
             replacement: "$1"
@@ -74,7 +74,7 @@ collects:
     relabel_configs:
       - target_label: __namespace__
         replacement: "node_server"
-      - source_labels: [ __raw__ ]
+      - source_labels: [__raw__]
         target_label: name
         regex: "#([^/]+).*"
     datasource:
@@ -83,10 +83,10 @@ collects:
     metrics:
       - name: "server cpu"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: __value__
             regex: "(?s:.*cpu=([0-9]+).*)"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: "(?s:\\[(.+?)].*)"
           - target_label: __name__
@@ -97,10 +97,10 @@ collects:
             __raw__: "(?s:.*)"
       - name: "server memory"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: __value__
             regex: "(?s:.*memory=([0-9]+).*)"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: "(?s:\\[(.+?)].*)"
           - target_label: __name__
@@ -111,13 +111,13 @@ collects:
             __raw__: "(?s:.*)"
       - name: "server info"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: hostname
             regex: "(?s:.*hostname=(.+?)\n.*)"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: ip
             regex: "(?s:.*ip=([0-9.]+).*)"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: "(?s:\\[(.+?)].*)"
           - target_label: __value__
@@ -133,7 +133,7 @@ collects:
     relabel_configs:
       - target_label: __namespace__
         replacement: "node_server"
-      - source_labels: [ __raw__ ]
+      - source_labels: [__raw__]
         target_label: name
         regex: "#([^/]+).*"
     datasource:
@@ -142,10 +142,10 @@ collects:
     metrics:
       - name: "server cpu"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: __value__
             regex: ".*cpu=(.+?)[!/].*"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: ".*@\\[(.+?)].*"
           - target_label: __name__
@@ -156,10 +156,10 @@ collects:
             __raw__: ".*"
       - name: "server memory"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: __value__
             regex: ".*memory=(.+?)[!/].*"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: ".*@\\[(.+?)].*"
           - target_label: __name__
@@ -170,13 +170,13 @@ collects:
             __raw__: ".*"
       - name: "server info"
         relabel_configs:
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: hostname
             regex: ".*hostname=(.+?)[!/].*"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: ip
             regex: ".*ip=(.+?)[!/].*"
-          - source_labels: [ __raw__ ]
+          - source_labels: [__raw__]
             target_label: name
             regex: ".*@\\[(.+?)].*"
           - target_label: __value__
