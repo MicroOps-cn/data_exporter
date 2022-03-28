@@ -187,7 +187,7 @@ const DefaultMaxContent = 102400000
 func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 	type plain Datasource
 	type T struct {
-		Config *yaml.Node `yaml:"config"`
+		Config *struct{} `yaml:"config"`
 		*plain `yaml:",inline"`
 	}
 	obj := &T{plain: (*plain)(d)}
@@ -218,10 +218,13 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 			if d.HTTPConfig != nil {
 				d.Config = d.HTTPConfig
 			} else if obj.Config != nil {
-				d.Config = new(HTTPConfig)
-				if err = obj.Config.Decode(d.Config); err != nil {
+				httpConfig := new(HTTPConfig)
+				if err = value.Decode(&struct {
+					Config *HTTPConfig
+				}{Config: httpConfig}); err != nil {
 					return nil
 				}
+				d.Config = httpConfig
 			} else {
 				d.Config = &DefaultHttpConfig
 			}
@@ -231,12 +234,15 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 			} else if d.Type == Udp && d.UDPConfig != nil {
 				d.Config = d.UDPConfig
 			} else {
-				d.Config = NewNetConfig(string(d.Type))
+				netConfig := NewNetConfig(string(d.Type))
 				if obj.Config != nil {
-					if err = obj.Config.Decode(d.Config); err != nil {
-						return err
+					if err = value.Decode(&struct {
+						Config *NetConfig
+					}{Config: netConfig}); err != nil {
+						return nil
 					}
 				}
+				d.Config = netConfig
 			}
 			if len(d.Config.(*NetConfig).EndOf) > 0 && len(d.EndOf) == 0 {
 				d.EndOf = d.Config.(*NetConfig).EndOf
