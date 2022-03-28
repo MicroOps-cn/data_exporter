@@ -244,12 +244,18 @@ func collectMetricsByName(logger log.Logger, name string, w http.ResponseWriter,
 	level.Debug(logger).Log("msg", "collect metrics by collect_name", "name", name)
 	conf := sc.GetConfig()
 	reg := prometheus.NewRegistry()
-
 	if collect := conf.Collects.Get(name); collect != nil {
-		reg.MustRegister(&collector.CollectContext{
+		collectCtx := &collector.CollectContext{
 			CollectConfig: collect,
 			Context:       r.Context(),
-		})
+		}
+		if r.URL.Query().Has("datasource") {
+			collectCtx.DatasourceName = r.URL.Query().Get("datasource")
+			if r.URL.Query().Has("url") {
+				collectCtx.DatasourceUrl = r.URL.Query().Get("url")
+			}
+		}
+		reg.MustRegister(collectCtx)
 	} else {
 		http.NotFound(w, r)
 		return

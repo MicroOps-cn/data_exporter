@@ -158,6 +158,7 @@ type Streamer interface {
 type Datasource struct {
 	Name                 string             `yaml:"name"`
 	Url                  string             `yaml:"url"`
+	AllowReplace         bool               `yaml:"allow_replace"`
 	Type                 DatasourceType     `yaml:"type"`
 	Timeout              time.Duration      `yaml:"timeout"`
 	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs"`

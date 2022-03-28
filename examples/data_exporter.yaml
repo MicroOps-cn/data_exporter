@@ -5,6 +5,9 @@ collects:
     datasource:
       - type: "http"
         url: "http://127.0.0.1:10101/my_data.json"
+        name: "simple-http-data"
+        # 覆盖URL http://microops:9116/test-http/metrics?datasource=simple-http-data&url=http://127.0.0.1:10101/my_data2.json
+        allow_replace: true
     metrics:
       - name: "Point1"
         relabel_configs:

@@ -259,6 +259,8 @@ type CollectContext struct {
 	*CollectConfig
 	cancelFunc context.CancelFunc
 	context.Context
+	DatasourceName string
+	DatasourceUrl  string
 }
 
 func (c *CollectContext) Describe(_ chan<- *prometheus.Desc) {
@@ -269,11 +271,21 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 	go func() {
 		wg := sync.WaitGroup{}
 		for i := range c.Datasource {
-			if c.Datasource[i].ReadMode != Stream {
+			ds := *c.Datasource[i]
+			if len(c.DatasourceName) != 0 {
+				if c.DatasourceName != c.Datasource[i].Name {
+					continue
+				} else if ds.AllowReplace {
+					if len(c.DatasourceUrl) != 0 {
+						ds.Url = c.DatasourceUrl
+					}
+				}
+			}
+			if ds.ReadMode != Stream {
 				wg.Add(1)
 				go func(idx int) {
 					defer wg.Done()
-					c.GetMetricByDs(c.Context, c.logger, c.Datasource[idx], metrics)
+					c.GetMetricByDs(c.Context, c.logger, &ds, metrics)
 				}(i)
 			}
 		}
@@ -296,6 +308,7 @@ type Collects []CollectConfig
 
 func (c Collects) Get(name string) *CollectConfig {
 	for idx := range c {
+		fmt.Println(c[idx].Name, name)
 		if c[idx].Name == name {
 			return &c[idx]
 		}
