@@ -69,7 +69,6 @@ func NewLineBuffer(rc io.ReadCloser, maxRead int64, lineMaxRead int, lineSep Sli
 	} else {
 		buf.buf = bufio.NewScanner(rc)
 	}
-	fmt.Println("..........", maxRead, lineMaxRead, lineSep, endOf)
 	if len(endOf) > 0 || len(lineSep) > 1 || (len(lineSep) == 1 && lineSep[0] != "\n") {
 		buf.buf.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 			if len(endOf) > 0 {

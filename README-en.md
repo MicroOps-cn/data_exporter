@@ -27,13 +27,13 @@ make && docker build -t data_exporter:0.2.0 .
 #### From binaries
 
 ```shell
-./data_exporter --config.file="data_exporter.yaml"
+./data_exporter --config.path="data_exporter.yaml"
 ```
 
 #### debug config file
 
 ```shell
-./data_exporter --config.file="data_exporter.yaml" --log.level=debug
+./data_exporter --config.path="data_exporter.yaml" --log.level=debug
 ```
 
 #### running examples
@@ -49,7 +49,7 @@ curl 127.0.0.1:9116/metrics
 #### Using the docker image
 
 ```shell
-docker run --rm -d -p 9116:9116 --name data_exporter -v `pwd`:/etc/data_exporter/ microops/data_exporter:0.2.0 --config.file=/etc/data_exporter/config.yml
+docker run --rm -d -p 9116:9116 --name data_exporter -v `pwd`:/etc/data_exporter/ microops/data_exporter:0.2.0 --config.path=/etc/data_exporter/config.yml
 ```
 
 ### Configuration

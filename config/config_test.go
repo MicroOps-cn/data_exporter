@@ -18,6 +18,7 @@ import (
 	"github.com/MicroOps-cn/data_exporter/collector"
 	testings "github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/go-kit/log"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 	wd, err := os.Getwd()
 	tt.AssertNoError(err)
 	tt.Logf("当前路径: %s", wd)
-	sc := NewConfig()
+	sc := NewSafeConfig()
 	tt.AssertNoError(sc.ReloadConfig("../examples/data_exporter.yaml", log.NewLogfmtLogger(os.Stdout)))
 	tt.AssertEqual(len(sc.C.Collects), 4)
 	for _, collect := range sc.C.Collects {
@@ -67,6 +68,12 @@ collects:
       relabel_configs: 
         - target_label: __namespace__
           replacement: "server"
+    - type: http
+      url: "https://examples.com/xxx.json"
+      config:
+        body: '{"A":1}'
+        headers: {"Content-Type": "application/json"}
+        method: 'POST'
   metrics:
     - name: "Point1"
       metric_type: "counter"
@@ -87,21 +94,21 @@ collects:
 func TestReloadConfig(t *testing.T) {
 	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
-	sc := NewConfig()
+	sc := NewSafeConfig()
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	tt.AssertEqual(sc.C.Collects[0].DataFormat, collector.Json)
 	reader = bytes.NewReader([]byte(strings.ReplaceAll(yamlConfigContent, `data_format: "json"`, `data_format: "yaml"`)))
-	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	tt.AssertEqual(sc.C.Collects[0].DataFormat, collector.Yaml)
 }
 
 func TestLoadConfig(t *testing.T) {
 	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
-	sc := NewConfig()
+	sc := NewSafeConfig()
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	tt.AssertEqual(len(sc.C.Collects), 1)
 	collect := sc.C.Collects[0]
 	tt.AssertEqual(collect.DataFormat, collector.Json)
@@ -116,7 +123,7 @@ func TestLoadConfig(t *testing.T) {
 	tt.AssertEqual(relabelConfig.SourceLabels.String(), strings.Join([]string{"__name__", "name"}, ", "))
 	tt.AssertEqual(relabelConfig.Separator, ".")
 
-	tt.AssertEqual(len(collect.Datasource), 1)
+	tt.AssertEqual(len(collect.Datasource), 2)
 	ds := collect.Datasource[0]
 	tt.AssertEqual(ds.Url, "../examples/my_data.json")
 	tt.AssertEqual(ds.Type, collector.File)
@@ -138,5 +145,13 @@ func TestLoadConfig(t *testing.T) {
 	tt.AssertEqual(metric.Match.Datapoint, "data|@expand|@expand|@to_entries:name:value")
 	tt.AssertEqual(metric.Match.Labels["__value__"], "value")
 	tt.AssertEqual(metric.Match.Labels["__name__"], "name")
+
+	httpDs := collect.Datasource[1]
+	tt.AssertEqual(httpDs.Type, collector.Http)
+	httpConfig, ok := httpDs.Config.(*collector.HTTPConfig)
+	tt.AssertEqual(ok, true, "failed to parse datasource config")
+	tt.AssertEqual(httpConfig.Body, `{"A":1}`)
+	tt.AssertEqual(httpConfig.Method, `POST`)
+	tt.AssertEqual(httpConfig.Headers["Content-Type"], `application/json`)
 
 }

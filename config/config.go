@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"io"
 	"os"
+	"path"
 	"sync"
 )
 
@@ -61,7 +62,6 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode((*plain)(c)); err != nil {
 		return err
 	}
-	c.ctx, c.cancelFunc = context.WithCancel(context.Background())
 	return nil
 }
 
@@ -70,34 +70,28 @@ type SafeConfig struct {
 	C *Config
 }
 
-func NewConfig() *SafeConfig {
+func NewSafeConfig() *SafeConfig {
 	return &SafeConfig{
-		C: &Config{},
+		C: NewConfig(),
 	}
 }
 
-func (sc *SafeConfig) ReloadConfigFromReader(reader io.Reader, logger log.Logger) (err error) {
-	var c = &Config{}
-	decoder := yaml.NewDecoder(reader)
-	decoder.KnownFields(true)
+func NewConfig() *Config {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	return &Config{ctx: ctx, cancelFunc: cancelFunc}
+}
 
-	if err = decoder.Decode(c); err != nil {
-		return fmt.Errorf("error parsing config file: %s", err)
-	}
-
-	if err = c.Init(logger); err != nil {
-		return fmt.Errorf("error init config: %s", err)
-	}
-	if sc.C != nil {
-		sc.C.Collects.StopStreamCollect()
-		if sc.C.cancelFunc != nil {
-			sc.C.cancelFunc()
-		}
+func (sc *SafeConfig) ReloadConfigFromReader(reader io.ReadCloser, logger log.Logger) (err error) {
+	var c = NewConfig()
+	if err = c.loadConfigFile(reader); err != nil {
+		return err
+	} else if err = c.Init(logger); err != nil {
+		return err
 	}
 	sc.Lock()
+	defer sc.Unlock()
 	sc.C = c
-	sc.Unlock()
-	return nil
+	return
 }
 
 func (sc *SafeConfig) SetConfig(conf *Config) {
@@ -110,7 +104,7 @@ func (sc *SafeConfig) GetConfig() *Config {
 	defer sc.Unlock()
 	return sc.C
 }
-func (sc *SafeConfig) ReloadConfig(confFile string, logger log.Logger) (err error) {
+func (sc *SafeConfig) ReloadConfig(confPath string, logger log.Logger) (err error) {
 	defer func() {
 		if err != nil {
 			configReloadSuccess.Set(0)
@@ -119,11 +113,67 @@ func (sc *SafeConfig) ReloadConfig(confFile string, logger log.Logger) (err erro
 			configReloadSeconds.SetToCurrentTime()
 		}
 	}()
-
-	yamlReader, err := os.Open(confFile)
-	if err != nil {
-		return fmt.Errorf("error reading config file: %s", err)
+	var c = NewConfig()
+	if err = c.LoadConfig(confPath); err != nil {
+		return err
 	}
-	defer yamlReader.Close()
-	return sc.ReloadConfigFromReader(yamlReader, logger)
+	if err = c.Init(logger); err != nil {
+		return fmt.Errorf("error init config: %s", err)
+	}
+	if sc.C != nil {
+		sc.C.Collects.StopStreamCollect()
+		if sc.C.cancelFunc != nil {
+			sc.C.cancelFunc()
+		}
+	}
+	sc.Lock()
+	defer sc.Unlock()
+	sc.C = c
+	return nil
+}
+
+func (c *Config) loadConfigFile(cfgFile io.ReadCloser) error {
+	defer cfgFile.Close()
+	var tmpCfg Config
+	decoder := yaml.NewDecoder(cfgFile)
+	decoder.KnownFields(true)
+
+	if err := decoder.Decode(&tmpCfg); err != nil {
+		return fmt.Errorf("error parsing config file: %s", err)
+	}
+	c.Collects = append(c.Collects, tmpCfg.Collects...)
+	return nil
+}
+func (c *Config) LoadConfig(configPath string) error {
+	if stat, err := os.Stat(configPath); err != nil {
+		return err
+	} else {
+		if stat.IsDir() {
+			cfgPool := os.DirFS(configPath)
+			if entrys, err := os.ReadDir(configPath); err != nil {
+				return err
+			} else {
+				for _, entry := range entrys {
+					if !entry.IsDir() {
+						switch path.Ext(entry.Name()) {
+						case ".yml", ".yaml":
+							if f, err := cfgPool.Open(entry.Name()); err != nil {
+								return err
+							} else if err = c.loadConfigFile(f); err != nil {
+								return err
+							}
+						}
+
+					}
+				}
+			}
+		} else {
+			if f, err := os.Open(configPath); err != nil {
+				return err
+			} else {
+				return c.loadConfigFile(f)
+			}
+		}
+	}
+	return nil
 }

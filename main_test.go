@@ -115,7 +115,7 @@ func TestCollectMetrics(t *testing.T) {
 	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("examples/weather.xml")
 		tt.AssertNoError(err)
@@ -147,7 +147,7 @@ func TestCollectMetricsByName(t *testing.T) {
 	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(reader, logger))
+	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("examples/weather.xml")
 		tt.AssertNoError(err)
@@ -244,7 +244,7 @@ func TestStreamCollect(t *testing.T) {
 	}()
 
 	reader := bytes.NewReader([]byte(streamTestConfig))
-	var c = &config.Config{}
+	var c = config.NewConfig()
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 
