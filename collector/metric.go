@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/tidwall/gjson"
 	"gopkg.in/yaml.v3"
 	"regexp"
@@ -142,6 +143,19 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 			level.Error(logger).Log("msg", "failed to relabel", "err", err)
 			continue
 		}
+
+		if !m.Labels.Has(LabelMetricName) {
+			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
+			if model.IsValidMetricName(model.LabelValue(metricName)) {
+				b := NewBuilder(m.Labels)
+				b.Set(LabelMetricName, metricName)
+				m.Labels.Append(LabelMetricName, metricName)
+				if m.Labels.Get("name") == mc.Name {
+					b.Del("name")
+				}
+				m.Labels = b.Labels()
+			}
+		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
@@ -183,6 +197,18 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 		if m.Labels, err = rcs.Process(m.Labels); err != nil {
 			level.Error(logger).Log("msg", "failed to relabel", "err", err)
 			continue
+		}
+		if !m.Labels.Has(LabelMetricName) {
+			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
+			if model.IsValidMetricName(model.LabelValue(metricName)) {
+				b := NewBuilder(m.Labels)
+				b.Set(LabelMetricName, metricName)
+				m.Labels.Append(LabelMetricName, metricName)
+				if m.Labels.Get("name") == mc.Name {
+					b.Del("name")
+				}
+				m.Labels = b.Labels()
+			}
 		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
@@ -231,6 +257,18 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 		if m.Labels, err = rcs.Process(m.Labels); err != nil {
 			level.Error(logger).Log("msg", "failed to relabel", "err", err)
 			continue
+		}
+		if !m.Labels.Has(LabelMetricName) {
+			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
+			if model.IsValidMetricName(model.LabelValue(metricName)) {
+				b := NewBuilder(m.Labels)
+				b.Set(LabelMetricName, metricName)
+				m.Labels.Append(LabelMetricName, metricName)
+				if m.Labels.Get("name") == mc.Name {
+					b.Del("name")
+				}
+				m.Labels = b.Labels()
+			}
 		}
 		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
