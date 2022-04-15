@@ -16,12 +16,15 @@ package collector
 import (
 	"context"
 	"fmt"
-	"github.com/MicroOps-cn/data_exporter/common"
+	"github.com/MicroOps-cn/data_exporter/pkg/buffer"
+	"github.com/go-kit/log"
+	"github.com/hpcloud/tail"
 	"github.com/prometheus/common/config"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
+	stdlog "log"
 	"net/http"
 	"net/url"
 	"os"
@@ -164,7 +167,7 @@ type Datasource struct {
 	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs"`
 	MaxContentLength     *int64             `yaml:"max_content_length"`
 	LineMaxContentLength *int               `yaml:"line_max_content_length"`
-	LineSeparator        common.SliceString `yaml:"line_separator"`
+	LineSeparator        buffer.SliceString `yaml:"line_separator"`
 	r                    io.ReadCloser
 	EndOf                string             `yaml:"end_of"`
 	ReadMode             DatasourceReadMode `yaml:"read_mode"`
@@ -293,11 +296,7 @@ func (d *Datasource) ReadAll(ctx context.Context) ([]byte, error) {
 	return ioutil.ReadAll(reader)
 }
 
-func (d *Datasource) GetLineStream(ctx context.Context) (common.ReadLineCloser, error) {
-	rc, err := d.GetStream(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (d *Datasource) GetLineStream(ctx context.Context, logger log.Logger) (buffer.ReadLineCloser, error) {
 	if d.MaxContentLength == nil {
 		d.MaxContentLength = new(int64)
 		*d.MaxContentLength = DefaultMaxContent
@@ -306,7 +305,27 @@ func (d *Datasource) GetLineStream(ctx context.Context) (common.ReadLineCloser, 
 		d.LineMaxContentLength = new(int)
 		*d.LineMaxContentLength = DefaultMaxContent
 	}
-	return common.NewLineBuffer(rc, *d.MaxContentLength, *d.LineMaxContentLength, d.LineSeparator, []byte(d.EndOf)), nil
+
+	if d.Type.ToLower() == File && d.ReadMode.ToLower() == Stream {
+		if t, err := tail.TailFile(d.Url, tail.Config{
+			Location:    &tail.SeekInfo{Whence: io.SeekEnd},
+			Follow:      true,
+			ReOpen:      true,
+			LineSep:     d.LineSeparator,
+			MaxLineSize: *d.LineMaxContentLength,
+			Logger:      stdlog.New(log.NewStdlibAdapter(logger), "", 0),
+		}); err != nil {
+			return nil, fmt.Errorf("Failed to open file %s: %s. ", d.Url, err)
+		} else {
+			return t, nil
+		}
+	}
+	rc, err := d.GetStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return buffer.NewLineBuffer(rc, *d.MaxContentLength, *d.LineMaxContentLength, d.LineSeparator, []byte(d.EndOf)), nil
 }
 
 func (d *Datasource) GetStream(ctx context.Context) (io.ReadCloser, error) {

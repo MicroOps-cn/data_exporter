@@ -46,6 +46,7 @@ const (
 	LabelMetricTime       = "__time__"
 	LabelMetricTimeFormat = "__time_format__"
 	LabelMetricValue      = "__value__"
+	LabelMetricBuckets    = "__buckets__"
 	//LabelMetricDescribe   = "__describe__"
 	labelSep = '\xfe'
 )

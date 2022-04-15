@@ -229,7 +229,7 @@ func testNetTlsConfig(t *testing.T, network string, listenTls func(*testings.T, 
 
 	func() {
 		t.Log("测试ReadLine: ")
-		stream, err := ds.GetLineStream(tt.Context)
+		stream, err := ds.GetLineStream(tt.Context, nil)
 		tt.AssertNoError(err)
 		defer stream.Close()
 		for {
@@ -283,7 +283,7 @@ func testNetConfig(t *testing.T, network string, listenFunc func(*testings.T, st
 	ds.Config = ds.TCPConfig
 	func() {
 		t.Log("测试ReadLine: ")
-		stream, err := ds.GetLineStream(tt.Context)
+		stream, err := ds.GetLineStream(tt.Context, nil)
 		tt.AssertNoError(err)
 		defer stream.Close()
 		for {

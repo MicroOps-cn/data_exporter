@@ -4,6 +4,7 @@ require (
 	github.com/beevik/etree v1.1.0
 	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/go-kit/log v0.1.0
+	github.com/hpcloud/tail v1.0.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.29.0
@@ -13,5 +14,7 @@ require (
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
+
+replace github.com/hpcloud/tail v1.0.0 => ./pkg/tail@v1.0.0
 
 go 1.15

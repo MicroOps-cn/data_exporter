@@ -24,7 +24,7 @@ func TestReadLineClose(t *testing.T) {
 	tt := testings.NewTesting(t)
 	var maxContentLength int64 = 110
 	ds := Datasource{ReadMode: StreamLine, Url: "../examples/my_data.txt", MaxContentLength: &maxContentLength, Type: File}
-	stream, err := ds.GetLineStream(context.TODO())
+	stream, err := ds.GetLineStream(context.TODO(), nil)
 	tt.AssertNoError(err)
 	defer stream.Close()
 	var line []byte

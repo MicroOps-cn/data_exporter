@@ -15,6 +15,7 @@ package collector
 
 import (
 	"fmt"
+	"github.com/MicroOps-cn/data_exporter/pkg/values"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -22,6 +23,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/tidwall/gjson"
 	"gopkg.in/yaml.v3"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -33,8 +35,9 @@ import (
 type MetricType string
 
 const (
-	Gauge   MetricType = "gauge"
-	Counter MetricType = "counter"
+	Gauge     MetricType = "gauge"
+	Counter   MetricType = "counter"
+	Histogram MetricType = "histogram"
 )
 
 func (d MetricType) ToLower() MetricType {
@@ -98,9 +101,10 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 
 func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	var err error
-	names := mc.Match.datapointRegexp.SubexpNames()
 	var dds [][][]byte
+	var names []string
 	if mc.Match.datapointRegexp != nil {
+		names = mc.Match.datapointRegexp.SubexpNames()
 		dds = mc.Match.datapointRegexp.FindAllSubmatch(data, -1)
 		level.Debug(logger).Log("msg", "regexp match - datapoint", "data", string(data), "exp", mc.Match.datapointRegexp, "result", len(dds))
 	} else {
@@ -300,13 +304,15 @@ type MetricGenerator struct {
 	Name       string
 }
 
+var ErrValueIsNull = fmt.Errorf("metric value is null")
+
 func (m *MetricGenerator) getMetricName() string {
 	return strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(m.Labels.Get(LabelMetricName)))
 }
 func (m *MetricGenerator) getValue() (float64, error) {
 	val := strings.TrimSpace(m.Labels.Get(LabelMetricValue))
 	if val == "" {
-		return 0, fmt.Errorf("metric value is null")
+		return 1, ErrValueIsNull
 	} else if val == "true" {
 		return 1.0, nil
 	} else if val == "false" {
@@ -343,7 +349,7 @@ func (m *MetricGenerator) getMetric() (prometheus.Metric, error) {
 	switch m.MetricType.ToLower() {
 	case Gauge:
 		metric := prometheus.NewGaugeVec(prometheus.GaugeOpts(opts), labels.Keys()).With(labels.Map())
-		if value, err := m.getValue(); err != nil {
+		if value, err := m.getValue(); err != nil && err != ErrValueIsNull {
 			return nil, err
 		} else {
 			metric.Set(value)
@@ -354,11 +360,41 @@ func (m *MetricGenerator) getMetric() (prometheus.Metric, error) {
 		return metric, nil
 	case Counter:
 		metric := prometheus.NewCounterVec(prometheus.CounterOpts(opts), labels.Keys()).With(labels.Map())
-		if value, err := m.getValue(); err != nil {
+		if value, err := m.getValue(); err != nil && err != ErrValueIsNull {
 			return nil, err
 		} else {
 			metric.Add(value)
 		}
+		if !t.IsZero() {
+			return prometheus.NewMetricWithTimestamp(t, metric), nil
+		}
+		return metric, nil
+
+	case Histogram:
+		buckets, err := values.NewValues(m.Labels.Get(LabelMetricBuckets), "").Float64s()
+		if err != nil {
+			return nil, fmt.Errorf("bucket format error: %s", err)
+		} else if len(buckets) == 0 {
+			return nil, fmt.Errorf("bucket length == 0")
+		}
+		histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace:   opts.Namespace,
+			Subsystem:   opts.Subsystem,
+			Name:        opts.Name,
+			Help:        opts.Help,
+			ConstLabels: opts.ConstLabels,
+			Buckets:     append(buckets, math.Inf(+1)),
+		}, labels.Keys())
+		if value, err := m.getValue(); err != nil {
+			return nil, err
+		} else {
+			histogram.With(labels.Map()).Observe(value)
+		}
+		metric, err := histogram.MetricVec.GetMetricWith(labels.Map())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get metric from histogram: %s", m.MetricType)
+		}
+
 		if !t.IsZero() {
 			return prometheus.NewMetricWithTimestamp(t, metric), nil
 		}
@@ -411,39 +447,62 @@ func (mg *MetricGroup) handle(mgr MetricGenerator) error {
 	metricHash := string(mgr.MetricType.ToLower()) + "\x00" + fqName + "\x00" + strings.Join(labelKeys, "\x00")
 
 	labels := mgr.Labels.WithoutEmpty().WithoutLabels().Map()
-	value, err := mgr.getValue()
-	if err != nil {
-		return err
-	}
-	if promMetric, ok := mg.metrics[metricHash]; ok && promMetric != nil {
+	promMetric, ok := mg.metrics[metricHash]
+	if !ok || promMetric == nil {
 		switch mgr.MetricType.ToLower() {
 		case Gauge:
-			if counterVec, ok := promMetric.(*prometheus.GaugeVec); ok {
+			promMetric = prometheus.NewGaugeVec(prometheus.GaugeOpts(opts), labelKeys)
+			mg.createMetric(metricHash, promMetric)
+		case Counter:
+			promMetric = prometheus.NewCounterVec(prometheus.CounterOpts(opts), labelKeys)
+			mg.createMetric(metricHash, promMetric)
+		case Histogram:
+			buckets, err := values.NewValues(mgr.Labels.Get(LabelMetricBuckets), "").Float64s()
+			if err != nil {
+				return fmt.Errorf("bucket format error: %s", err)
+			} else if len(buckets) == 0 {
+				return fmt.Errorf("bucket length == 0")
+			}
+			promMetric := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Namespace:   opts.Namespace,
+				Subsystem:   opts.Subsystem,
+				Name:        opts.Name,
+				Help:        opts.Help,
+				ConstLabels: opts.ConstLabels,
+				Buckets:     append(buckets, math.Inf(+1)),
+			}, labelKeys)
+			mg.createMetric(metricHash, promMetric)
+		default:
+			return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
+		}
+	}
+	switch mgr.MetricType.ToLower() {
+	case Gauge:
+		if counterVec, ok := promMetric.(*prometheus.GaugeVec); ok {
+			if value, err := mgr.getValue(); err != nil && err != ErrValueIsNull {
+				return err
+			} else {
 				counterVec.With(labels).Set(value)
 			}
-		case Counter:
-			if counterVec, ok := promMetric.(*prometheus.CounterVec); ok {
+		}
+	case Counter:
+		if counterVec, ok := promMetric.(*prometheus.CounterVec); ok {
+			if value, err := mgr.getValue(); err != nil && err != ErrValueIsNull {
+				return err
+			} else {
 				counterVec.With(labels).Add(value)
 			}
-		default:
-			return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
 		}
-	} else {
-		switch mgr.MetricType.ToLower() {
-		case Gauge:
-			gaugeVec := prometheus.NewGaugeVec(prometheus.GaugeOpts(opts), labelKeys)
-			gaugeVec.With(labels).Set(value)
-			mg.createMetric(metricHash, gaugeVec)
-		case Counter:
-			counterVec := prometheus.NewCounterVec(prometheus.CounterOpts(opts), labelKeys)
-			counterVec.With(labels).Add(value)
-			if err != nil {
+	case Histogram:
+		if histogramVec, ok := promMetric.(*prometheus.HistogramVec); ok {
+			if value, err := mgr.getValue(); err != nil {
 				return err
+			} else {
+				histogramVec.With(labels).Observe(value)
 			}
-			mg.createMetric(metricHash, counterVec)
-		default:
-			return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
 		}
+	default:
+		return fmt.Errorf("unknown metric type: %s", mgr.MetricType)
 	}
 	return nil
 }

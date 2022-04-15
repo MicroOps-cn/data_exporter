@@ -16,7 +16,7 @@ package collector
 import (
 	"context"
 	"fmt"
-	"github.com/MicroOps-cn/data_exporter/common"
+	"github.com/MicroOps-cn/data_exporter/pkg/buffer"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -94,9 +94,11 @@ func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
 	} else {
 		c.DataFormat = c.DataFormat.ToLower()
 		for i := range c.Metrics {
+			fmt.Println(c.Metrics[i])
 			pointPrefix := fmt.Sprintf("Collect.Metrics[%d].Match", i)
 			if c.DataFormat == Regex {
 				if err = c.Metrics[i].BuildRegexp(pointPrefix); err != nil {
+					fmt.Println(err)
 					return err
 				}
 			} else if c.DataFormat == Xml {
@@ -128,7 +130,7 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 	rcs := append(c.RelabelConfigs, ds.RelabelConfigs...)
 	if ds.ReadMode == Line {
 		err := func() error {
-			stream, err := ds.GetLineStream(ctx)
+			stream, err := ds.GetLineStream(ctx, logger)
 			if err != nil {
 				return err
 			}
@@ -163,17 +165,17 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	for _, mc := range c.Metrics {
 		rcs = append(rcs, mc.RelabelConfigs...)
-		logger = log.With(logger, "metric", mc.Name)
-		level.Debug(logger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
+		metricLogger := log.With(logger, "metric", mc.Name)
+		level.Debug(metricLogger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
 		switch c.DataFormat.ToLower() {
 		case Regex:
-			mc.GetMetricByRegex(logger, data, rcs, metrics)
+			mc.GetMetricByRegex(metricLogger, data, rcs, metrics)
 		case Json:
-			mc.GetMetricByJson(logger, data, rcs, metrics)
+			mc.GetMetricByJson(metricLogger, data, rcs, metrics)
 		case Xml:
-			mc.GetMetricByXml(logger, data, rcs, metrics)
+			mc.GetMetricByXml(metricLogger, data, rcs, metrics)
 		case Yaml:
-			mc.GetMetricByYaml(logger, data, rcs, metrics)
+			mc.GetMetricByYaml(metricLogger, data, rcs, metrics)
 		}
 	}
 }
@@ -191,7 +193,7 @@ func (c *CollectConfig) StopStreamCollect() {
 	}
 }
 
-func (c *CollectConfig) tailDsStream(ctx context.Context, ds *Datasource, stream common.ReadLineCloser, metrics chan<- MetricGenerator) {
+func (c *CollectConfig) tailDsStream(ctx context.Context, ds *Datasource, stream buffer.ReadLineCloser, metrics chan<- MetricGenerator) {
 	defer stream.Close()
 	var line []byte
 	var err error
@@ -204,6 +206,7 @@ func (c *CollectConfig) tailDsStream(ctx context.Context, ds *Datasource, stream
 		default:
 			line, err = stream.ReadLine()
 			if err != nil {
+				level.Warn(c.logger).Log("log", "failed to read line", "err", err)
 				return
 			}
 			c.GetMetric(logger, line, rcs, metrics)
@@ -215,12 +218,12 @@ func (c *CollectConfig) StartStreamCollect(ctx context.Context) error {
 	metrics := make(chan MetricGenerator, 10)
 	for i := range c.Datasource {
 		if c.Datasource[i].ReadMode == Stream {
-			stream, err := c.Datasource[i].GetLineStream(ctx)
+			stream, err := c.Datasource[i].GetLineStream(ctx, log.With(c.logger, "datasource", c.Datasource[i].Name))
 			if err != nil {
 				level.Error(c.logger).Log("log", "failed to start stream collect", "err", err, "datasource", c.Datasource[i].Name)
 				return err
 			}
-			go func(ds *Datasource, buf common.ReadLineCloser) {
+			go func(ds *Datasource, buf buffer.ReadLineCloser) {
 				var e error
 				for {
 					select {
@@ -229,11 +232,11 @@ func (c *CollectConfig) StartStreamCollect(ctx context.Context) error {
 					default:
 						c.tailDsStream(ctx, ds, buf, metrics)
 					}
-					buf, err = ds.GetLineStream(ctx)
-					if e != nil {
-						level.Error(c.logger).Log("log", "failed to start stream collect", "err", err, "datasource", ds.Name)
-					}
 
+					buf, e = ds.GetLineStream(ctx, log.With(c.logger, "datasource", ds.Name))
+					if e != nil {
+						level.Error(c.logger).Log("log", "failed to start stream collect, retry...", "err", err, "datasource", ds.Name)
+					}
 				}
 			}(c.Datasource[i], stream)
 		}
@@ -308,7 +311,6 @@ type Collects []CollectConfig
 
 func (c Collects) Get(name string) *CollectConfig {
 	for idx := range c {
-		fmt.Println(c[idx].Name, name)
 		if c[idx].Name == name {
 			return &c[idx]
 		}
