@@ -166,7 +166,7 @@ func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelCon
 	for _, mc := range c.Metrics {
 		rcs = append(rcs, mc.RelabelConfigs...)
 		metricLogger := log.With(logger, "metric", mc.Name)
-		level.Debug(metricLogger).Log("msg", "get metric", "data_format", c.DataFormat, "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)))
+		level.Debug(metricLogger).Log("title", "Raw Data", "data_format", c.DataFormat, "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
 		switch c.DataFormat.ToLower() {
 		case Regex:
 			mc.GetMetricByRegex(metricLogger, data, rcs, metrics)

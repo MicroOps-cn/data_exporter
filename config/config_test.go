@@ -30,7 +30,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	collector.DefaultTimeout = &defaultTimeout
+	collector.DatasourceDefaultTimeout = defaultTimeout
 }
 func TestLoadConfigFromFile(t *testing.T) {
 	tt := testings.NewTesting(t)

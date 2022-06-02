@@ -141,6 +141,24 @@ type RelabelConfig struct {
 
 type RelabelConfigs []*RelabelConfig
 
+func (rcs RelabelConfigs) String() string {
+	var ret []map[string]interface{}
+	buf, err := yaml.Marshal(rcs)
+	if err != nil {
+		return fmt.Sprintf("<Unknown Error: %s>", err)
+	}
+
+	err = yaml.Unmarshal(buf, &ret)
+	if err != nil {
+		return fmt.Sprintf("<Unknown Error: %s>", err)
+	}
+	marshal, err := json.Marshal(ret)
+	if err != nil {
+		return fmt.Sprintf("<Unknown Error: %s>", err)
+	}
+	return string(marshal)
+}
+
 func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
 	*c = DefaultRelabelConfig
 	type plain RelabelConfig

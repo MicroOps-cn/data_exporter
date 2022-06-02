@@ -100,6 +100,32 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+func (mc *MetricConfig) relabel(logger log.Logger, rcs RelabelConfigs, lvs Labels) (newLvs Labels, err error) {
+	defer func() {
+		if err == nil {
+			level.Debug(logger).Log("title", "Relabel Process", "labels", newLvs, "oldLabels", lvs, "relabelConfigs", rcs)
+		}
+	}()
+	if newLvs, err = rcs.Process(lvs); err != nil {
+		level.Error(logger).Log("msg", "failed to relabel", "err", err, "labels", lvs, "relabelConfigs", rcs)
+		return nil, err
+	}
+	if !newLvs.Has(LabelMetricName) {
+		metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(mc.Name))
+		fmt.Println(metricName)
+		if model.IsValidMetricName(model.LabelValue(metricName)) {
+			b := NewBuilder(newLvs)
+			b.Set(LabelMetricName, metricName)
+			newLvs.Append(LabelMetricName, metricName)
+			if newLvs.Get("name") == mc.Name {
+				b.Del("name")
+			}
+			newLvs = b.Labels()
+		}
+	}
+	return newLvs, nil
+}
+
 func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	var err error
 	var dds [][][]byte
@@ -107,7 +133,7 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 	if mc.Match.datapointRegexp != nil {
 		names = mc.Match.datapointRegexp.SubexpNames()
 		dds = mc.Match.datapointRegexp.FindAllSubmatch(data, -1)
-		level.Debug(logger).Log("msg", "regexp match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.datapointRegexp, "result", len(dds))
+		level.Debug(logger).Log("title", "Datapoint Match by Regex", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.datapointRegexp, "resultCount", len(dds))
 	} else {
 		dds = [][][]byte{{data}}
 	}
@@ -128,7 +154,7 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 		for name, labelRegexp := range mc.Match.labelsRegexp {
 			dp := string(dd[0])
 			val := labelRegexp.FindStringSubmatch(dp)
-			level.Debug(logger).Log("msg", "regexp match - label", "data", string(wrapper.Limit[byte]([]byte(dp), 100, []byte("...")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
+			level.Debug(logger).Log("title", "Label Match by Regex", "data", string(wrapper.Limit[byte]([]byte(dp), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
 			if len(val) > 0 {
 				labelNames := labelRegexp.SubexpNames()
 				if len(labelNames) > 1 {
@@ -143,25 +169,10 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 				}
 			}
 		}
-		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
-		if m.Labels, err = rcs.Process(m.Labels); err != nil {
-			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
+		if err != nil {
 			continue
 		}
-
-		if !m.Labels.Has(LabelMetricName) {
-			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
-			if model.IsValidMetricName(model.LabelValue(metricName)) {
-				b := NewBuilder(m.Labels)
-				b.Set(LabelMetricName, metricName)
-				m.Labels.Append(LabelMetricName, metricName)
-				if m.Labels.Get("name") == mc.Name {
-					b.Del("name")
-				}
-				m.Labels = b.Labels()
-			}
-		}
-		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
 }
@@ -169,7 +180,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 	jn := gjson.ParseBytes(data)
 	if len(mc.Match.Datapoint) != 0 {
 		jn = jn.Get(mc.Match.Datapoint)
-		level.Debug(logger).Log("msg", "json match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.Datapoint, "result", jn.Raw)
+		level.Debug(logger).Log("title", "Datapoint Match By Gjson", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.Datapoint, "result", jn.Raw)
 	}
 	if len(jn.Raw) == 0 {
 		return
@@ -192,44 +203,31 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 		)
 		for name, valMatch := range mc.Match.Labels {
 			val := j.Get(valMatch).String()
-			level.Debug(logger).Log("msg", "json match - label", "data", string(wrapper.Limit[byte]([]byte(j.Raw), 100, []byte("...")...)), "exp", valMatch, "result", val, "label", name)
+			level.Debug(logger).Log("title", "Label Match by Gjson", "data", string(wrapper.Limit[byte]([]byte(j.Raw), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", valMatch, "result", val, "label", name)
 			if len(val) > 0 {
 				m.Labels.Append(name, val)
 			}
 		}
-		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
 
-		if m.Labels, err = rcs.Process(m.Labels); err != nil {
-			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
+		if err != nil {
 			continue
 		}
-		if !m.Labels.Has(LabelMetricName) {
-			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
-			if model.IsValidMetricName(model.LabelValue(metricName)) {
-				b := NewBuilder(m.Labels)
-				b.Set(LabelMetricName, metricName)
-				m.Labels.Append(LabelMetricName, metricName)
-				if m.Labels.Get("name") == mc.Name {
-					b.Del("name")
-				}
-				m.Labels = b.Labels()
-			}
-		}
-		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
 }
+
 func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
-		level.Error(logger).Log("msg", "failed to parse xml data.", "err", err)
+		level.Error(logger).Log("msg", "failed to parse xml data.", "err", err, "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
 		return
 	}
 	var elems []*etree.Element
 	if mc.Match.datapointXmlPath != nil {
 		elems = doc.FindElementsPath(*mc.Match.datapointXmlPath)
-		level.Debug(logger).Log("msg", "xml match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.Datapoint, "result", len(elems))
+		level.Debug(logger).Log("title", "Datapoint Match by XML(etree.FindElementsPath)", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.Datapoint, "resultCount", len(elems))
 	} else {
 		elems = []*etree.Element{&doc.Element}
 	}
@@ -250,32 +248,20 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 				level.Error(logger).Log("msg", "failed to parse xml data: failed to execute template.", "err", err)
 				continue
 			}
-			level.Debug(logger).Log("msg", "xml match - label", "data",
-				fmt.Sprintf("<%s>%s</%s>", elem.Tag, string(wrapper.Limit[byte]([]byte(strings.TrimSpace(elem.Text())), 100, []byte("...")...)), elem.Tag),
+			vdoc := etree.NewDocument()
+			vdoc.AddChild(elem)
+			toString, err := vdoc.WriteToString()
+			level.Debug(logger).Log("title", "Label Match by XML(etree.FindElementsPath)", "data",
+				string(wrapper.Limit[byte]([]byte(strings.TrimSpace(toString)), 256, wrapper.PosCenter, []byte(" ... ")...)),
 				"exp", mc.Match.Labels[name], "result", val, "label", name)
 			if len(val) > 0 {
 				m.Labels.Append(name, string(val))
 			}
 		}
-
-		level.Debug(logger).Log("msg", "relabel process - before", "labels", m.Labels)
-		if m.Labels, err = rcs.Process(m.Labels); err != nil {
-			level.Error(logger).Log("msg", "failed to relabel", "err", err)
+		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
+		if err != nil {
 			continue
 		}
-		if !m.Labels.Has(LabelMetricName) {
-			metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(mc.Name))
-			if model.IsValidMetricName(model.LabelValue(metricName)) {
-				b := NewBuilder(m.Labels)
-				b.Set(LabelMetricName, metricName)
-				m.Labels.Append(LabelMetricName, metricName)
-				if m.Labels.Get("name") == mc.Name {
-					b.Del("name")
-				}
-				m.Labels = b.Labels()
-			}
-		}
-		level.Debug(logger).Log("msg", "relabel process - after", "labels", m.Labels)
 		metrics <- m
 	}
 }
@@ -285,7 +271,7 @@ func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs Rela
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse yaml data.", "err", err, "yaml", data)
 	} else {
-		level.Debug(logger).Log("msg", "YAML转JSON", "json", string(jsonData), "yaml", data)
+		level.Debug(logger).Log("title", "YAML to JSON", "json", string(wrapper.Limit[byte](jsonData, 256, wrapper.PosCenter, []byte(" ... ")...)), "yaml", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
 		mc.GetMetricByJson(logger, jsonData, rcs, metrics)
 	}
 }
