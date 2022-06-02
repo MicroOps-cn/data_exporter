@@ -13,13 +13,13 @@ HTTP response message, local file, TCP response message and UDP response message
 #### Local Build
 
 ```shell
-make 
+make common-build
 ```
 
 #### Building with Docker
 
 ```shell
-make && docker build -t data_exporter:0.2.0 .
+make && docker build -t data_exporter:0.4.0 .
 ```
 
 ### Running this software
@@ -51,7 +51,8 @@ curl 127.0.0.1:9116/metrics
 ```shell
 git clone https://github.com/MicroOps-cn/data_exporter
 cd data_exporter/examples/
-docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.3.2 --config.path=/etc/data_exporter/data_exporter.yaml
+sed -i 's#../examples/#/etc/data_exporter/#g' data_exporter.yaml
+docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.4.0 --config.path=/etc/data_exporter/data_exporter.yaml
 docker logs data_exporter
 ```
 
