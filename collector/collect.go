@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/pkg/buffer"
+	"github.com/MicroOps-cn/data_exporter/pkg/wrapper"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -94,7 +95,6 @@ func (c *CollectConfig) UnmarshalYAML(value *yaml.Node) error {
 	} else {
 		c.DataFormat = c.DataFormat.ToLower()
 		for i := range c.Metrics {
-			fmt.Println(c.Metrics[i])
 			pointPrefix := fmt.Sprintf("Collect.Metrics[%d].Match", i)
 			if c.DataFormat == Regex {
 				if err = c.Metrics[i].BuildRegexp(pointPrefix); err != nil {
@@ -166,7 +166,7 @@ func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelCon
 	for _, mc := range c.Metrics {
 		rcs = append(rcs, mc.RelabelConfigs...)
 		metricLogger := log.With(logger, "metric", mc.Name)
-		level.Debug(metricLogger).Log("msg", "get metric", "data_format", c.DataFormat, "data", data)
+		level.Debug(metricLogger).Log("msg", "get metric", "data_format", c.DataFormat, "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)))
 		switch c.DataFormat.ToLower() {
 		case Regex:
 			mc.GetMetricByRegex(metricLogger, data, rcs, metrics)

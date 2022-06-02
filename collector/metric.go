@@ -16,6 +16,7 @@ package collector
 import (
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/pkg/values"
+	"github.com/MicroOps-cn/data_exporter/pkg/wrapper"
 	"github.com/beevik/etree"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -106,7 +107,7 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 	if mc.Match.datapointRegexp != nil {
 		names = mc.Match.datapointRegexp.SubexpNames()
 		dds = mc.Match.datapointRegexp.FindAllSubmatch(data, -1)
-		level.Debug(logger).Log("msg", "regexp match - datapoint", "data", string(data), "exp", mc.Match.datapointRegexp, "result", len(dds))
+		level.Debug(logger).Log("msg", "regexp match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.datapointRegexp, "result", len(dds))
 	} else {
 		dds = [][][]byte{{data}}
 	}
@@ -127,7 +128,7 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 		for name, labelRegexp := range mc.Match.labelsRegexp {
 			dp := string(dd[0])
 			val := labelRegexp.FindStringSubmatch(dp)
-			level.Debug(logger).Log("msg", "regexp match - label", "data", dp, "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
+			level.Debug(logger).Log("msg", "regexp match - label", "data", string(wrapper.Limit[byte]([]byte(dp), 100, []byte("...")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
 			if len(val) > 0 {
 				labelNames := labelRegexp.SubexpNames()
 				if len(labelNames) > 1 {
@@ -168,7 +169,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 	jn := gjson.ParseBytes(data)
 	if len(mc.Match.Datapoint) != 0 {
 		jn = jn.Get(mc.Match.Datapoint)
-		level.Debug(logger).Log("msg", "json match - datapoint", "data", string(data), "exp", mc.Match.Datapoint, "result", jn.Raw)
+		level.Debug(logger).Log("msg", "json match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.Datapoint, "result", jn.Raw)
 	}
 	if len(jn.Raw) == 0 {
 		return
@@ -191,7 +192,7 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 		)
 		for name, valMatch := range mc.Match.Labels {
 			val := j.Get(valMatch).String()
-			level.Debug(logger).Log("msg", "json match - label", "data", j.Raw, "exp", valMatch, "result", val, "label", name)
+			level.Debug(logger).Log("msg", "json match - label", "data", string(wrapper.Limit[byte]([]byte(j.Raw), 100, []byte("...")...)), "exp", valMatch, "result", val, "label", name)
 			if len(val) > 0 {
 				m.Labels.Append(name, val)
 			}
@@ -228,7 +229,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	var elems []*etree.Element
 	if mc.Match.datapointXmlPath != nil {
 		elems = doc.FindElementsPath(*mc.Match.datapointXmlPath)
-		level.Debug(logger).Log("msg", "xml match - datapoint", "data", string(data), "exp", mc.Match.Datapoint, "result", len(elems))
+		level.Debug(logger).Log("msg", "xml match - datapoint", "data", string(wrapper.Limit[byte](data, 100, []byte("...")...)), "exp", mc.Match.Datapoint, "result", len(elems))
 	} else {
 		elems = []*etree.Element{&doc.Element}
 	}
@@ -250,7 +251,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 				continue
 			}
 			level.Debug(logger).Log("msg", "xml match - label", "data",
-				fmt.Sprintf("<%s>%s</%s>", elem.Tag, strings.TrimSpace(elem.Text()), elem.Tag),
+				fmt.Sprintf("<%s>%s</%s>", elem.Tag, string(wrapper.Limit[byte]([]byte(strings.TrimSpace(elem.Text())), 100, []byte("...")...)), elem.Tag),
 				"exp", mc.Match.Labels[name], "result", val, "label", name)
 			if len(val) > 0 {
 				m.Labels.Append(name, string(val))
