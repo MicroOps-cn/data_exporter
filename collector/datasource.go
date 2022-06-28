@@ -20,6 +20,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/hpcloud/tail"
 	"github.com/prometheus/common/config"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
@@ -87,7 +89,7 @@ func (h HTTPConfig) GetStream(ctx context.Context, name, targetURL string) (io.R
 		return nil, err
 	}
 	for key, value := range h.Headers {
-		if strings.Title(key) == "Host" {
+		if cases.Title(language.English).String(key) == "Host" {
 			request.Host = value
 			continue
 		}

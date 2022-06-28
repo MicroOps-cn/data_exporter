@@ -112,7 +112,6 @@ func (mc *MetricConfig) relabel(logger log.Logger, rcs RelabelConfigs, lvs Label
 	}
 	if !newLvs.Has(LabelMetricName) {
 		metricName := strings.ToLower(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(mc.Name))
-		fmt.Println(metricName)
 		if model.IsValidMetricName(model.LabelValue(metricName)) {
 			b := NewBuilder(newLvs)
 			b.Set(LabelMetricName, metricName)
@@ -231,7 +230,7 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	} else {
 		elems = []*etree.Element{&doc.Element}
 	}
-	var err error
+
 	for _, elem := range elems {
 		var (
 			m = MetricGenerator{
@@ -241,6 +240,14 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
 			}
 		)
+
+		vdoc := etree.NewDocument()
+		vdoc.AddChild(elem.Copy())
+		elemRaw, err := vdoc.WriteToString()
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to parse xml data: failed to write to string.", "err", err)
+		}
+
 		for name, labelMatch := range mc.Match.labelsTmpl {
 			val, err := labelMatch.Execute(elem)
 			if err != nil {
@@ -248,12 +255,10 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 				level.Error(logger).Log("msg", "failed to parse xml data: failed to execute template.", "err", err)
 				continue
 			}
-			vdoc := etree.NewDocument()
-			vdoc.AddChild(elem)
-			toString, err := vdoc.WriteToString()
 			level.Debug(logger).Log("title", "Label Match by XML(etree.FindElementsPath)", "data",
-				string(wrapper.Limit[byte]([]byte(strings.TrimSpace(toString)), 256, wrapper.PosCenter, []byte(" ... ")...)),
+				string(wrapper.Limit[byte]([]byte(strings.TrimSpace(elemRaw)), 256, wrapper.PosCenter, []byte(" ... ")...)),
 				"exp", mc.Match.Labels[name], "result", val, "label", name)
+
 			if len(val) > 0 {
 				m.Labels.Append(name, string(val))
 			}

@@ -22,7 +22,7 @@ import (
 
 func TestNewLineBuffer(t *testing.T) {
 	tt := testings.NewTesting(t)
-	f, err := os.Open("../examples/my_data.txt")
+	f, err := os.Open("../../examples/my_data.txt")
 	tt.AssertNoError(err)
 	buf := NewLineBuffer(f, 64, 0, []string{"emory=", "\n"}, []byte("server3"))
 	line, err := buf.ReadLine()
@@ -44,7 +44,7 @@ func TestNewLineBuffer(t *testing.T) {
 	tt.AssertNoError(err)
 	tt.AssertEqual("ip=1.1.1.", string(line))
 	f.Close()
-	f, err = os.Open("../examples/my_data.txt")
+	f, err = os.Open("../../examples/my_data.txt")
 	tt.AssertNoError(err)
 	buf = NewLineBuffer(f, 0, 5, []string{"]"}, []byte(""))
 	line, err = buf.ReadLine()
