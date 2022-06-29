@@ -19,7 +19,7 @@ make common-build
 #### Building with Docker
 
 ```shell
-make && docker build -t data_exporter:0.4.0 .
+make common-build && docker build -t data_exporter:0.4.1 .
 ```
 
 ### Running this software
@@ -52,7 +52,7 @@ curl 127.0.0.1:9116/metrics
 git clone https://github.com/MicroOps-cn/data_exporter
 cd data_exporter/examples/
 sed -i 's#../examples/#/etc/data_exporter/#g' data_exporter.yaml
-docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.4.0 --config.path=/etc/data_exporter/data_exporter.yaml
+docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.4.1 --config.path=/etc/data_exporter/data_exporter.yaml
 docker logs data_exporter
 ```
 
