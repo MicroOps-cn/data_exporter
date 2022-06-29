@@ -3,8 +3,9 @@ collects:
     data_format: "regex"
     datasource:
       - type: "file"
-        url: "/var/log/nginx/ops.access.log"
+        url: "/etc/data_exporter/ops.access.log"
         read_mode: "stream"
+        whence: 0  # seek to file start, default seek to file end.
     metrics:
       - name: "nginx_response_status_count"
         metric_type: "counter"
@@ -12,7 +13,7 @@ collects:
           datapoint: '^[\d\.]+ - - \[\S+ \S+\] "(?P<method>\S+) \S+ (?P<protocol>\S+)" (?P<status>\d+) .*$' # yamllint disable-line
       - name: "nginx_request_count"
         metric_type: "counter"
-      - name: "nginx_response_bytes_count"
+      - name: "nginx_response_bytes"
         metric_type: "histogram"
         match:
           datapoint: '[\d\.]+ - - \[\S+ \S+\] "\S+ \S+ \S+" \d+ (?P<__value__>\d+) .*' # yamllint disable-line

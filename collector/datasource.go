@@ -173,6 +173,7 @@ type Datasource struct {
 	EndOf                string             `yaml:"end_of"`
 	ReadMode             DatasourceReadMode `yaml:"read_mode"`
 	Config               Streamer           `yaml:"_config"`
+	Whence               int                `yaml:"whence"`
 
 	// Deprecated
 	HTTPConfig *HTTPConfig `yaml:"http"`
@@ -195,6 +196,7 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 		Config *struct{} `yaml:"config"`
 		*plain `yaml:",inline"`
 	}
+	d.Whence = io.SeekEnd
 	obj := &T{plain: (*plain)(d)}
 	if err := value.Decode(obj); err != nil {
 		return err
@@ -309,7 +311,7 @@ func (d *Datasource) GetLineStream(ctx context.Context, logger log.Logger) (buff
 
 	if d.Type.ToLower() == File && d.ReadMode.ToLower() == Stream {
 		if t, err := tail.TailFile(d.Url, tail.Config{
-			Location:    &tail.SeekInfo{Whence: io.SeekEnd},
+			Location:    &tail.SeekInfo{Whence: d.Whence},
 			Follow:      true,
 			ReOpen:      true,
 			LineSep:     d.LineSeparator,

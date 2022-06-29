@@ -43,6 +43,7 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var (
@@ -103,6 +104,7 @@ func init() {
 		debugLogger := logs.New(&debugLogCfg)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conf := sc.GetConfig()
+			time.Sleep(time.Second / 2)
 			reg := prometheus.NewRegistry()
 			for idx := range conf.Collects {
 				conf.Collects[idx].SetLogger(debugLogger)

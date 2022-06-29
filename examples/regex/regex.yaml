@@ -6,7 +6,7 @@ collects:
         replacement: "node_server"
     datasource:
       - type: "file"
-        url: "../examples/my_data_line.txt"
+        url: "/etc/data_exporter/my_data_line.txt"
     metrics:
       - name: regex - info
         relabel_configs:
