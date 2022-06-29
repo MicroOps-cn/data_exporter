@@ -46,7 +46,7 @@ collects:
     data_format: "xml"
     datasource:
       - type: "file"
-        url: "../examples/weather.xml"
+        url: "/etc/data_exporter/weather.xml"
     metrics:
       - name: "weather - hour"
         match:
@@ -82,7 +82,7 @@ collects:
         regex: "#([^/]+).*"
     datasource:
       - type: "file"
-        url: "../examples/my_data.txt"
+        url: "/etc/data_exporter/my_data.txt"
     metrics:
       - name: "server cpu"
         relabel_configs:

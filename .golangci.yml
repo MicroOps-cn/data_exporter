@@ -1,5 +1,6 @@
-# Run only staticcheck for now. Additional linters will be enabled one-by-one.
-linters:
-  enable:
-    - staticcheck
-  disable-all: true
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (github.com/go-kit/log.Logger).Log
+run:
+  go: '1.18'

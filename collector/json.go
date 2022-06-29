@@ -110,7 +110,6 @@ func (G GArray) String() string {
 			buf.WriteByte(',')
 		}
 		buf.WriteString(v.Raw)
-		idx++
 	}
 	return buf.String()
 }

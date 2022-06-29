@@ -38,20 +38,20 @@ func (d debugLogger) Log(keyvals ...interface{}) error {
 		kvMap[name] = val
 	}
 	if title, ok := kvMap["title"].(string); ok && len(title) > 0 {
-		d.w.Write([]byte(term.TitleStr(title, '-')))
+		_, _ = d.w.Write([]byte(term.TitleStr(title, '-')))
 	}
 	for _, name = range debugBlackName {
 		if val, ok := kvMap[name]; ok && val != nil {
 			switch v := val.(type) {
 			case []byte:
-				d.w.Write([]byte(fmt.Sprintf("%-20s%s\n", fmt.Sprintf("[%s]", name), strings.ReplaceAll(fmt.Sprintf("%s", string(v)), "\n", " "))))
+				_, _ = d.w.Write([]byte(fmt.Sprintf("%-20s%s\n", fmt.Sprintf("[%s]", name), strings.ReplaceAll(fmt.Sprintf("%s", string(v)), "\n", " "))))
 			default:
-				d.w.Write([]byte(fmt.Sprintf("%-20s%s\n", fmt.Sprintf("[%s]", name), strings.ReplaceAll(fmt.Sprintf("%v", val), "\n", " "))))
+				_, _ = d.w.Write([]byte(fmt.Sprintf("%-20s%s\n", fmt.Sprintf("[%s]", name), strings.ReplaceAll(fmt.Sprintf("%v", val), "\n", " "))))
 			}
 		}
 	}
 	if title, ok := kvMap["title"].(string); ok && len(title) > 0 {
-		d.w.Write([]byte(term.TitleStr("", '-')))
+		_, _ = d.w.Write([]byte(term.TitleStr("", '-')))
 	}
 	return nil
 }

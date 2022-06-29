@@ -40,12 +40,12 @@ func TestLoadConfigFromFile(t *testing.T) {
 	sc := NewSafeConfig()
 	tt.AssertNoError(sc.ReloadConfig("../examples/data_exporter.yaml", log.NewLogfmtLogger(os.Stdout)))
 	tt.AssertEqual(len(sc.C.Collects), 4)
-	for _, collect := range sc.C.Collects {
-		for _, ds := range collect.Datasource {
+	for idx := range sc.C.Collects {
+		for _, ds := range sc.C.Collects[idx].Datasource {
 			tt.AssertNotEqual(len(ds.Type), 0)
 			tt.AssertNotEqual(len(ds.Url), 0)
 		}
-		for _, metric := range collect.Metrics {
+		for _, metric := range sc.C.Collects[idx].Metrics {
 			tt.AssertNotEqual(len(metric.MetricType), 0)
 		}
 	}
@@ -110,7 +110,7 @@ func TestLoadConfig(t *testing.T) {
 	reader := bytes.NewReader([]byte(yamlConfigContent))
 	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	tt.AssertEqual(len(sc.C.Collects), 1)
-	collect := sc.C.Collects[0]
+	collect := &sc.C.Collects[0]
 	tt.AssertEqual(collect.DataFormat, collector.Json)
 	tt.AssertEqual(collect.Name, "test-file")
 

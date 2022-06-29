@@ -9,13 +9,13 @@ collects:
       - name: "nginx_response_status_count"
         metric_type: "counter"
         match:
-          datapoint: '^[\d\.]+ - - \[\S+ \S+\] "(?P<method>\S+) \S+ (?P<protocol>\S+)" (?P<status>\d+) .*$'
+          datapoint: '^[\d\.]+ - - \[\S+ \S+\] "(?P<method>\S+) \S+ (?P<protocol>\S+)" (?P<status>\d+) .*$' # yamllint disable-line
       - name: "nginx_request_count"
         metric_type: "counter"
       - name: "nginx_response_bytes_count"
         metric_type: "histogram"
         match:
-          datapoint: '[\d\.]+ - - \[\S+ \S+\] "\S+ \S+ \S+" \d+ (?P<__value__>\d+) .*'
+          datapoint: '[\d\.]+ - - \[\S+ \S+\] "\S+ \S+ \S+" \d+ (?P<__value__>\d+) .*' # yamllint disable-line
         relabel_configs:
           - target_label: __buckets__
             replacement: "100,200,500,1024"

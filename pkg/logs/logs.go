@@ -73,7 +73,9 @@ func New(config *Config) log.Logger {
 		return l
 	default:
 		logFormat := promlog.AllowedFormat{}
-		logFormat.Set(config.Format.String())
+		if err := logFormat.Set(config.Format.String()); err != nil {
+			panic(err)
+		}
 		return promlog.New(&promlog.Config{Level: config.Level, Format: &logFormat})
 	}
 }

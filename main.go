@@ -94,8 +94,12 @@ func init() {
 	}).Default()
 	debugFlagSet.Action(func(_ *kingpin.ParseContext) error {
 		debugLogCfg := logs.Config{Level: &promlog.AllowedLevel{}, Format: &logs.AllowedFormat{}}
-		debugLogCfg.Level.Set("debug")
-		debugLogCfg.Format.Set("debug")
+		if err := debugLogCfg.Level.Set("debug"); err != nil {
+			return err
+		}
+		if err := debugLogCfg.Format.Set("debug"); err != nil {
+			return err
+		}
 		debugLogger := logs.New(&debugLogCfg)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conf := sc.GetConfig()
