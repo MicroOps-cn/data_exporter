@@ -8,6 +8,12 @@ HTTP response message, local file, TCP response message and UDP response message
 
 [English](./README-en.md)  |  [简体中文](./README.md)
 
+### Quick start
+```bash
+docker run  -itd -p 9116:9116 --rm --name data_exporter microops/data_exporter
+curl http://127.0.0.1:9116/metrics
+```
+
 ### Building the software
 
 #### Local Build
@@ -19,7 +25,7 @@ make common-build
 #### Building with Docker
 
 ```shell
-make common-build && docker build -t data_exporter:0.4.1 .
+make common-build && docker build -t data_exporter .
 ```
 
 ### Running this software
@@ -34,6 +40,10 @@ make common-build && docker build -t data_exporter:0.4.1 .
 
 ```shell
 ./data_exporter --config.path="data_exporter.yaml" --log.level=debug
+```
+Or use docker:
+```bash
+docker run  -it --rm -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter debug  
 ```
 
 #### running examples
@@ -52,7 +62,7 @@ curl 127.0.0.1:9116/metrics
 git clone https://github.com/MicroOps-cn/data_exporter
 cd data_exporter/examples/
 sed -i 's#../examples/#/etc/data_exporter/#g' data_exporter.yaml
-docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.4.1 --config.path=/etc/data_exporter/data_exporter.yaml
+docker run --rm -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter --config.path=/etc/data_exporter/data_exporter.yaml
 docker logs data_exporter
 ```
 

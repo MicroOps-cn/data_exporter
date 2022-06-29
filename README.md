@@ -9,6 +9,11 @@ Prometheus Common Data Exporter is used to parse JSON, XML, yaml or other format
 HTTP response message, local file, TCP response message and UDP response message) into Prometheus metric data.
 
 [English](./README-en.md)  |  [简体中文](./README.md)
+### 快速开始
+```bash
+docker run  -itd -p 9116:9116 --rm --name data_exporter microops/data_exporter
+curl http://127.0.0.1:9116/metrics
+```
 
 ### 编译
 
@@ -21,7 +26,7 @@ make common-build
 #### 编译Docker镜像
 
 ```shell
-make common-build && docker build -t data_exporter:0.4.1 .
+make common-build && docker build -t data_exporter .
 ```
 
 ### 运行
@@ -36,6 +41,10 @@ make common-build && docker build -t data_exporter:0.4.1 .
 
 ```shell
 ./data_exporter debug --config.path="data_exporter.yaml"
+```
+或者使用Docker:
+```bash
+docker run  -it --rm -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter debug  
 ```
 
 #### 启动examples
@@ -54,7 +63,7 @@ curl 127.0.0.1:9116/metrics
 git clone https://github.com/MicroOps-cn/data_exporter
 cd data_exporter/examples/
 sed -i 's#../examples/#/etc/data_exporter/#g' data_exporter.yaml
-docker run  -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter:0.4.1 --config.path=/etc/data_exporter/data_exporter.yaml
+docker run --rm -itd -p 9116:9116 -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter --config.path=/etc/data_exporter/data_exporter.yaml
 docker logs data_exporter
 ```
 
