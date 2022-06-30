@@ -39,15 +39,6 @@ var (
 )
 
 const (
-	LabelMetricName       = "__name__"
-	LabelMetricNamespace  = "__namespace__"
-	LabelMetricSubsystem  = "__subsystem__"
-	LabelMetricHelp       = "__help__"
-	LabelMetricTime       = "__time__"
-	LabelMetricTimeFormat = "__time_format__"
-	LabelMetricValue      = "__value__"
-	LabelMetricBuckets    = "__buckets__"
-	//LabelMetricDescribe   = "__describe__"
 	labelSep = '\xfe'
 )
 

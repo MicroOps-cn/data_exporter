@@ -296,13 +296,29 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 		close(metrics)
 	}()
 	for metric := range metrics {
-		m, err := metric.getMetric()
-		if err != nil {
-			collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
-			level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
+		if metric.Labels.Has(LabelMetricValues) {
+			ms, errs := metric.getMetrics()
+			for _, err := range errs {
+				if err != nil {
+					collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
+					level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
+				}
+			}
+			for _, m := range ms {
+				if m != nil {
+					proMetrics <- m
+				}
+			}
 		} else {
-			proMetrics <- m
+			m, err := metric.getMetric()
+			if err != nil {
+				collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
+				level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
+			} else {
+				proMetrics <- m
+			}
 		}
+
 	}
 	c.metrics.Collect(proMetrics)
 }

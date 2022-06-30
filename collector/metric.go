@@ -41,6 +41,21 @@ const (
 	Histogram MetricType = "histogram"
 )
 
+const (
+	LabelMetricName                 = "__name__"
+	LabelMetricNamespace            = "__namespace__"
+	LabelMetricSubsystem            = "__subsystem__"
+	LabelMetricHelp                 = "__help__"
+	LabelMetricTime                 = "__time__"
+	LabelMetricTimeFormat           = "__time_format__"
+	LabelMetricValue                = "__value__"
+	LabelMetricBuckets              = "__buckets__"
+	LabelMetricValues               = "__values__"
+	LabelMetricValuesSeparator      = "__values_separator__"
+	LabelMetricValuesIndex          = "__values_index__"
+	LabelMetricValuesIndexSeparator = "__values_index_separator__"
+)
+
 func (d MetricType) ToLower() MetricType {
 	return MetricType(strings.ToLower(string(d)))
 }
@@ -301,6 +316,7 @@ var ErrValueIsNull = fmt.Errorf("metric value is null")
 func (m *MetricGenerator) getMetricName() string {
 	return strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(m.Labels.Get(LabelMetricName)))
 }
+
 func (m *MetricGenerator) getValue() (float64, error) {
 	val := strings.TrimSpace(m.Labels.Get(LabelMetricValue))
 	if val == "" {
@@ -311,6 +327,36 @@ func (m *MetricGenerator) getValue() (float64, error) {
 		return 0.0, nil
 	}
 	return strconv.ParseFloat(val, 64)
+}
+
+func (m *MetricGenerator) getValues() (vals []float64, index []string, errs []error) {
+	separator := m.Labels.Get(LabelMetricValuesSeparator)
+	if separator == "" {
+		separator = " "
+	}
+	indexSeparator := m.Labels.Get(LabelMetricValuesIndexSeparator)
+	if indexSeparator == "" {
+		indexSeparator = separator
+	}
+	rawVals := strings.Split(strings.TrimSpace(m.Labels.Get(LabelMetricValues)), separator)
+	rawIndexs := strings.Split(strings.TrimSpace(m.Labels.Get(LabelMetricValuesIndex)), indexSeparator)
+	if len(rawIndexs) != len(rawVals) {
+		return nil, nil, []error{fmt.Errorf(`values length not equal to index length`)}
+	}
+	errs = make([]error, len(rawVals))
+	index = make([]string, len(rawVals))
+	vals = make([]float64, len(rawVals))
+	for i, rawVal := range rawVals {
+		index[i] = rawIndexs[i]
+		if rawVal == "" || rawVal == "true" {
+			vals[i] = 1
+		} else if rawVal == "false" {
+			vals[i] = 0
+		} else {
+			vals[i], errs[i] = strconv.ParseFloat(rawVal, 64)
+		}
+	}
+	return
 }
 
 func (m *MetricGenerator) getOpts() (prometheus.Opts, error) {
@@ -326,16 +372,85 @@ func (m *MetricGenerator) getOpts() (prometheus.Opts, error) {
 	return opts, nil
 }
 
-func (m *MetricGenerator) getMetric() (prometheus.Metric, error) {
-	opts := prometheus.Opts{}
-
-	opts.Name = m.getMetricName()
-	if opts.Name == "" {
-		return nil, fmt.Errorf(`"%s" is not a valid metric name`, opts.Name)
+func (m *MetricGenerator) getMetrics() ([]prometheus.Metric, []error) {
+	opts, err := m.getOpts()
+	if err != nil {
+		return nil, []error{err}
 	}
-	opts.Namespace = m.Labels.Get(LabelMetricNamespace)
-	opts.Subsystem = m.Labels.Get(LabelMetricSubsystem)
-	opts.Help = m.Labels.Get(LabelMetricHelp)
+	t := m.getTime()
+	labels := m.Labels.WithoutEmpty().WithoutLabels()
+	vals, index, errs := m.getValues()
+	if len(vals) == 0 && len(errs) == 1 {
+		return nil, errs
+	} else if len(vals) != len(index) || len(vals) != len(errs) {
+		return nil, []error{fmt.Errorf(`unknown error: len(vals)=%d, len(index)=%d, len(errs)=%d`, len(vals), len(index), len(errs))}
+	}
+	var metrics []prometheus.Metric
+	for i, value := range vals {
+		if errs[i] != nil {
+			continue
+		}
+		lvs := labels.Map()
+		lvs["index"] = index[i]
+		labelNames := append(labels.Keys(), "index")
+		switch m.MetricType.ToLower() {
+		case Gauge:
+			metric := prometheus.NewGaugeVec(prometheus.GaugeOpts(opts), labelNames).With(lvs)
+			metric.Set(value)
+			if !t.IsZero() {
+				metrics = append(metrics, prometheus.NewMetricWithTimestamp(t, metric))
+			} else {
+				metrics = append(metrics, metric)
+			}
+		case Counter:
+			metric := prometheus.NewCounterVec(prometheus.CounterOpts(opts), labelNames).With(lvs)
+			metric.Add(value)
+			if !t.IsZero() {
+				metrics = append(metrics, prometheus.NewMetricWithTimestamp(t, metric))
+			} else {
+				metrics = append(metrics, metric)
+			}
+		case Histogram:
+			buckets, err := values.NewValues(m.Labels.Get(LabelMetricBuckets), "").Float64s()
+			if err != nil {
+				errs[i] = fmt.Errorf("bucket format error: %s", err)
+				continue
+			} else if len(buckets) == 0 {
+				errs[i] = fmt.Errorf("bucket length == 0")
+				continue
+			}
+			histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Namespace:   opts.Namespace,
+				Subsystem:   opts.Subsystem,
+				Name:        opts.Name,
+				Help:        opts.Help,
+				ConstLabels: opts.ConstLabels,
+				Buckets:     append(buckets, math.Inf(+1)),
+			}, labelNames)
+			histogram.With(lvs).Observe(value)
+			metric, err := histogram.MetricVec.GetMetricWith(labels.Map())
+			if err != nil {
+				errs[i] = fmt.Errorf("failed to get metric from histogram: %s", m.MetricType)
+				continue
+			}
+
+			if !t.IsZero() {
+				metrics = append(metrics, prometheus.NewMetricWithTimestamp(t, metric))
+			} else {
+				metrics = append(metrics, metric)
+			}
+		default:
+			errs[i] = fmt.Errorf("unknown metric type: %s", m.MetricType)
+			continue
+		}
+	}
+	return metrics, errs
+}
+func (m *MetricGenerator) getMetric() (prometheus.Metric, error) {
+	opts, err := m.getOpts()
+	if err != nil {
+		return nil, err
+	}
 	t := m.getTime()
 	labels := m.Labels.WithoutEmpty().WithoutLabels()
 	switch m.MetricType.ToLower() {

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<measCollecFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.3gpp.org/ftp/specs/archive/32_series/32.435#measCollec http://www.3gpp.org/ftp/specs/archive/32_series/32.435#measCollec" xmlns="http://www.3gpp.org/ftp/specs/archive/32_series/32.435#measCollec">
+   <fileHeader fileFormatVersion="32.435 V7.0" vendorName="XXXX XXXX.">
+      <fileSender localDn="SubNetwork=ANIEMS"/>
+      <measCollec beginTime="2022-03-17T10:00:00+00:00"/>
+   </fileHeader>
+   <measData>
+      <managedElement localDn="ManagedElement=ORAN-XXXX-TB" swVersion="V4.0.4g_132_oran.1"/>
+      <measInfo measInfoId="FDDL">
+         <measTypes>VS.FDDL.TrnsmssnMode2Nbr</measTypes>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-31">
+            <measResults>101 200 300 90 30</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-11">
+            <measResults>10 20 30 40 50</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-21">
+            <measResults>11 12 13 14 15</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-11">
+            <measResults>1 2 3 4 5</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-31">
+            <measResults>6 7 8 9 10</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-21">
+            <measResults>9 8 7 6 5</measResults>
+         </measValue>
+      </measInfo>
+      <measInfo measInfoId="RRC">
+         <measTypes>VS.RRC.RedirEutranSuccNbr VS.RRC.RedirEutranAttA2Nbr VS.RRC.EutrantoNRRedirAttNbr VS.RRC.RedirEutranAttUnknownPlmnNbr</measTypes>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-31">
+            <measResults>10 20 30 40</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-11">
+            <measResults>60 70 80 90</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL08-123456-21">
+            <measResults>50 40 30 20</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-11">
+            <measResults>10 20 20 30</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-31">
+            <measResults>40 30 20 10</measResults>
+         </measValue>
+         <measValue measObjLdn="ENBFunction=ORAN-XXXX-TB,EUtranCellFDD=TL21-123456-21">
+            <measResults>90 20 30 10</measResults>
+         </measValue>
+      </measInfo>
+</measCollecFile>

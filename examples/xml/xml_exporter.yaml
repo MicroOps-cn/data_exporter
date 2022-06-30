@@ -1,0 +1,70 @@
+collects:
+  - name: "meas_info"
+    data_format: "xml"
+    datasource:
+      - type: "file"
+        url: "/etc/data_exporter/pmdata.xml"
+    metrics:
+      - name: "meas_info"
+        match:
+          datapoint: "//measData/measInfo/measValue/measResults"
+          labels:
+            __values__: '{{ .Text }}'
+            __values_separator__: ' '
+            __values_index__: '{{ (.FindElement "../../measTypes").Text }}'
+            __values_index_separator__: ' '
+            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+            # Suppose the value of "begintime" is the real time when the monitoring data is generated
+            __time__: '{{ ((.FindElement "../../../../fileHeader/measCollec").SelectAttr "beginTime").Value }}'
+
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            # Suppose the value of "begintime" is the real time when the monitoring data is generated
+#            __time__: '{{ ((.FindElement "../../../../fileHeader/measCollec").SelectAttr "beginTime").Value }}'
+#            index: 0
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^[0-9]+ ([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            index: 1
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^(?:[0-9]+ ){2}([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            index: 2
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^(?:[0-9]+ ){3}([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            index: 3
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^(?:[0-9]+ ){4}([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            index: 4
+#      - name: "meas_info"
+#        match:
+#          datapoint: "//measData/measInfo/measValue/measResults"
+#          labels:
+#            __value__: '{{ .Text|reReplaceAll "^(?:[0-9]+ ){5}([0-9]+).+$" "$1" }}'
+#            name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
+#            meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
+#            index: 5
