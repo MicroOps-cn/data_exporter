@@ -49,7 +49,7 @@ import (
 var (
 	sc            = config.NewSafeConfig()
 	flagSet       = kingpin.New(os.Args[0], "Prometheus Common Data Exporter is used to parse JSON, XML, yaml or other format data from multiple sources (such as HTTP response message, local file, TCP response message and UDP response message) into Prometheus metric data.")
-	exporterName  = config.ExporterName
+	exporterName  = collector.ExporterName
 	webConfig     = webflag.AddFlags(flagSet)
 	debugFlagSet  = flagSet.Command("debug", "Debug configuration")
 	runFlagSet    = flagSet.Command("run", "Run a exporter")
@@ -113,8 +113,10 @@ func init() {
 					Context:       r.Context(),
 				})
 			}
+			reg2 := prometheus.NewRegistry()
+			collector.RegisterCollector(reg2)
 			handler := promhttp.HandlerFor(
-				prometheus.Gatherers{reg},
+				prometheus.Gatherers{reg, reg2},
 				promhttp.HandlerOpts{
 					ErrorLog:            stdlog.New(log.NewStdlibAdapter(level.Error(rootLogger)), "", 0),
 					ErrorHandling:       promhttp.ContinueOnError,

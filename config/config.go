@@ -26,17 +26,15 @@ import (
 	"sync"
 )
 
-const ExporterName string = "data_exporter"
-
 var (
 	configReloadSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: ExporterName,
+		Namespace: collector.ExporterName,
 		Name:      "config_last_reload_successful",
 		Help:      "Blackbox exporter config loaded successfully.",
 	})
 
 	configReloadSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: ExporterName,
+		Namespace: collector.ExporterName,
 		Name:      "config_last_reload_success_timestamp_seconds",
 		Help:      "Timestamp of the last successful configuration reload.",
 	})

@@ -29,6 +29,8 @@ import (
 	"sync"
 )
 
+const ExporterName string = "data_exporter"
+
 type DataFormat string
 
 func (d DataFormat) ToLower() DataFormat {
@@ -37,8 +39,9 @@ func (d DataFormat) ToLower() DataFormat {
 
 var (
 	collectErrorCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "data_collect_error_count",
-		Help: "datasource or metric collect error count",
+		Namespace: ExporterName,
+		Name:      "collect_error_count",
+		Help:      "datasource or metric collect error count",
 	}, []string{"type", "name"})
 )
 
