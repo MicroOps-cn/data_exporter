@@ -10,9 +10,10 @@ collects:
           datapoint: "//measData/measInfo/measValue/measResults"
           labels:
             __values__: '{{ .Text }}'
-            __values_separator__: ' '
             __values_index__: '{{ (.FindElement "../../measTypes").Text }}'
-            __values_index_separator__: ' '
+            __values_separator__: ' ' # # The default value is " "
+            __values_index_label_name__: '' # The default value is "index"
+            __values_index_separator__: ' ' # By default, this value is the same as`__values_separator__` equally
             name: '{{ ((.FindElement "../").SelectAttr "measObjLdn").Value }}'
             meas_info_id: '{{ ((.FindElement "../../").SelectAttr "measInfoId").Value }}'
             # Suppose the value of "begintime" is the real time when the monitoring data is generated
