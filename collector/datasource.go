@@ -15,6 +15,7 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/pkg/buffer"
 	"github.com/go-kit/log"
@@ -167,6 +168,7 @@ type Datasource struct {
 	Timeout              time.Duration      `yaml:"timeout"`
 	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs"`
 	MaxContentLength     *int64             `yaml:"max_content_length"`
+	MinContentLength     *int               `yaml:"min_content_length"`
 	LineMaxContentLength *int               `yaml:"line_max_content_length"`
 	LineSeparator        buffer.SliceString `yaml:"line_separator"`
 	r                    io.ReadCloser
@@ -189,6 +191,8 @@ var (
 )
 
 const DefaultMaxContent = 102400000
+
+var ErrorDataTooSort = errors.New("data is too short")
 
 func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 	type plain Datasource
@@ -275,6 +279,10 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 				*d.MaxContentLength = DefaultMaxContent
 			}
 		}
+		if d.MinContentLength == nil {
+			d.MinContentLength = new(int)
+			*d.MinContentLength = 0
+		}
 		if d.Timeout == time.Duration(0) {
 			d.Timeout = DatasourceDefaultTimeout
 		}
@@ -296,7 +304,18 @@ func (d *Datasource) ReadAll(ctx context.Context) ([]byte, error) {
 	}
 	defer rc.Close()
 	reader = io.LimitReader(rc, *d.MaxContentLength)
-	return ioutil.ReadAll(reader)
+	if d.MinContentLength != nil && *d.MinContentLength > 0 {
+		data, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) < *d.MinContentLength {
+			return nil, ErrorDataTooSort
+		}
+		return data, nil
+	} else {
+		return ioutil.ReadAll(reader)
+	}
 }
 
 func (d *Datasource) GetLineStream(ctx context.Context, logger log.Logger) (buffer.ReadLineCloser, error) {

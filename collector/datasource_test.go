@@ -55,3 +55,11 @@ func TestReadAll(t *testing.T) {
 		tt.AssertEqual(int64(len(all)-1), maxContentLength)
 	}
 }
+func Test_ReadAll_ContentLength(t *testing.T) {
+	tt := testings.NewTesting(t)
+	var maxContentLength int64 = 1e6
+	var minContentLength int = 1024
+	ds := Datasource{ReadMode: Line, Url: "../examples/my_data.txt", MinContentLength: &minContentLength, MaxContentLength: &maxContentLength, Type: File}
+	_, err := ds.ReadAll(context.TODO())
+	tt.AssertEqual(err, ErrorDataTooSort)
+}
