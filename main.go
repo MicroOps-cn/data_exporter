@@ -80,7 +80,7 @@ func init() {
 	collector.AddFlags(flagSet)
 	flagSet.PreAction(func(pCtx *kingpin.ParseContext) error {
 		for _, element := range pCtx.Elements {
-			if flag, ok := element.Clause.(*kingpin.FlagClause); ok && flag == flagSet.HelpFlag {
+			if flag, ok := element.Clause.(*kingpin.FlagClause); ok && (flag == flagSet.HelpFlag || flag == flagSet.VersionFlag) {
 				return nil
 			}
 		}
