@@ -78,7 +78,12 @@ func init() {
 	flagSet.Version(version.Print(exporterName))
 	flagSet.HelpFlag.Short('h')
 	collector.AddFlags(flagSet)
-	flagSet.PreAction(func(_ *kingpin.ParseContext) error {
+	flagSet.PreAction(func(pCtx *kingpin.ParseContext) error {
+		for _, element := range pCtx.Elements {
+			if flag, ok := element.Clause.(*kingpin.FlagClause); ok && flag == flagSet.HelpFlag {
+				return nil
+			}
+		}
 		rootLogger = logs.New(promlogConfig)
 		if len(*configFile) > 0 {
 			*configPath = *configFile

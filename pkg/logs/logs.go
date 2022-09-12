@@ -50,7 +50,18 @@ type Config struct {
 }
 
 func New(config *Config) log.Logger {
-	fmt.Println(config.Format.String())
+	if config.Level == nil {
+		config.Level = &promlog.AllowedLevel{}
+	}
+	if config.Level.String() == "" {
+		config.Level.Set("info")
+	}
+	if config.Format == nil {
+		config.Format = &AllowedFormat{}
+	}
+	if config.Format.String() == "" {
+		config.Format.Set("logfmt")
+	}
 	switch config.Format.String() {
 	case "debug":
 		var l log.Logger = newDebugLogger(log.NewSyncWriter(os.Stderr))
