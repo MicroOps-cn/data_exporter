@@ -25,7 +25,6 @@ import (
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 	"io"
-	"io/ioutil"
 	stdlog "log"
 	"net/http"
 	"net/url"
@@ -305,7 +304,7 @@ func (d *Datasource) ReadAll(ctx context.Context) ([]byte, error) {
 	defer rc.Close()
 	reader = io.LimitReader(rc, *d.MaxContentLength)
 	if d.MinContentLength != nil && *d.MinContentLength > 0 {
-		data, err := ioutil.ReadAll(reader)
+		data, err := io.ReadAll(reader)
 		if err != nil {
 			return nil, err
 		}
@@ -314,7 +313,7 @@ func (d *Datasource) ReadAll(ctx context.Context) ([]byte, error) {
 		}
 		return data, nil
 	} else {
-		return ioutil.ReadAll(reader)
+		return io.ReadAll(reader)
 	}
 }
 
