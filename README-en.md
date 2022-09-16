@@ -111,15 +111,15 @@ collects:
 datasource:
   - type: "file"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
-    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
-    
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
     read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
     url: "../examples/weather.xml"
-    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
-    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
+    end_of: # The message end flag, when read, will stop reading and close the connection. It is only valid when "read_mode" is line. The message is line buffered, so the value of "end_of" cannot be multiple lines.
+    max_content_length: <int> # The maximum read length, in bytes. If the "read_mode" value is stream, the default value is 0 (unlimited), otherwise the default value is 102400000
+    min_content_length: <int> # Read the minimum length in bytes. The default value is 0 (unlimited). Only read_ Valid when the mode is full.
+    line_max_content_length: <int> # The maximum number of bytes read per line. 0 is unlimited, and the default is 102400000. Only in read_ Valid when the mode is line or stream.
+    line_separator: [<string>,...] # Line separator. The value type can be string, [string,...], and the default is "\n". Only valid when "read_mode" is line or stream.
 ```
 
 #### http
@@ -128,8 +128,6 @@ datasource:
 datasource:
   - type: "http"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
-    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
     read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
@@ -160,8 +158,11 @@ datasource:
       headers: { <string>: <string>, ... } # custom HTTP request headers
       method: <string> #HTTP request method, example: GET/POST/PUT...
       valid_status_codes: [ <number>,... ] # valid status code,default to 200~299.
-    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
-    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
+    end_of: # The message end flag, when read, will stop reading and close the connection. It is only valid when "read_mode" is line. The message is line buffered, so the value of "end_of" cannot be multiple lines.
+    max_content_length: <int> # The maximum read length, in bytes. If the "read_mode" value is stream, the default value is 0 (unlimited), otherwise the default value is 102400000
+    min_content_length: <int> # Read the minimum length in bytes. The default value is 0 (unlimited). Only read_ Valid when the mode is full.
+    line_max_content_length: <int> # The maximum number of bytes read per line. 0 is unlimited, and the default is 102400000. Only in read_ Valid when the mode is line or stream.
+    line_separator: [<string>,...] # Line separator. The value type can be string, [string,...], and the default is "\n". Only valid when "read_mode" is line or stream.
 ```
 
 #### tcp
@@ -170,8 +171,6 @@ datasource:
 datasource:
   - type: "tcp"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
-    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
     read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
@@ -186,8 +185,11 @@ datasource:
           delay: <duration>
       max_connect_time: <duration> # The maximum time to establish a connection (excluding data transmission). If the connection is not established successfully after this time, a failure will be returned. Default to 3s
       max_transfer_time: <duration> # Maximum message transmission time. If the message transmission exceeds this time, it will stop reading and close the connection. Default to 3s
-    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
-    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
+    end_of: # The message end flag, when read, will stop reading and close the connection. It is only valid when "read_mode" is line. The message is line buffered, so the value of "end_of" cannot be multiple lines.
+    max_content_length: <int> # The maximum read length, in bytes. If the "read_mode" value is stream, the default value is 0 (unlimited), otherwise the default value is 102400000
+    min_content_length: <int> # Read the minimum length in bytes. The default value is 0 (unlimited). Only read_ Valid when the mode is full.
+    line_max_content_length: <int> # The maximum number of bytes read per line. 0 is unlimited, and the default is 102400000. Only in read_ Valid when the mode is line or stream.
+    line_separator: [<string>,...] # Line separator. The value type can be string, [string,...], and the default is "\n". Only valid when "read_mode" is line or stream.
 ```
 
 Note: `end_of` and `max_transfer_time` is used to control closing the connection (message transmission is completed).
@@ -201,8 +203,6 @@ use `end_of` to control and increase the value of `max_transfer_time`.
 datasource:
   - type: "udp"
     name: <string> # datasource name 
-    max_content_length: <int> # The maximum read length, in bytes, When the value of "read_mode" is stream, it defaults to 0 (unlimited),otherwise the default value is 102400000  
-    line_max_content_length: <int> # The maximum read length per line,in bytes,0 means unlimited, defaults: 102400000
     relabel_configs: [ <relabel_config>, ... ] # reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
     timeout: <duration>  # The default is "30s", which cannot be less than "1ms", reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#duration
     read_mode: <string> # read mode, The value can be: "stream","line" or "full", defaults: "full"
@@ -215,8 +215,11 @@ datasource:
           delay: <duration>
       max_connect_time: <duration> # The maximum time to establish a connection (excluding data transmission). If the connection is not established successfully after this time, a failure will be returned. Default to 3s
       max_transfer_time: <duration> # Maximum message transmission time. If the message transmission exceeds this time, it will stop reading and close the connection. Default to 3s
-    line_separator: [<string>,...] # The value can be string、[string,...], Line separator, default: "\n"
-    end_of: # Message end flag. When this flag is read, it will stop reading and close the connection. The message is line buffered, so The end_of value of cannot be multiple rows.
+    end_of: # The message end flag, when read, will stop reading and close the connection. It is only valid when "read_mode" is line. The message is line buffered, so the value of "end_of" cannot be multiple lines.
+    max_content_length: <int> # The maximum read length, in bytes. If the "read_mode" value is stream, the default value is 0 (unlimited), otherwise the default value is 102400000
+    min_content_length: <int> # Read the minimum length in bytes. The default value is 0 (unlimited). Only read_ Valid when the mode is full.
+    line_max_content_length: <int> # The maximum number of bytes read per line. 0 is unlimited, and the default is 102400000. Only in read_ Valid when the mode is line or stream.
+    line_separator: [<string>,...] # Line separator. The value type can be string, [string,...], and the default is "\n". Only valid when "read_mode" is line or stream.
 ```
 
 Note: UDP does not support TLS temporarily
