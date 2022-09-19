@@ -20,12 +20,13 @@ import (
 	"github.com/MicroOps-cn/data_exporter/pkg/buffer"
 	"github.com/go-kit/log"
 	"github.com/hpcloud/tail"
-	"github.com/prometheus/common/config"
+	promconfig "github.com/prometheus/common/config"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 	"io"
 	stdlog "log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -65,15 +66,38 @@ func (d DatasourceReadMode) ToLower() DatasourceReadMode {
 }
 
 type HTTPConfig struct {
-	HTTPClientConfig config.HTTPClientConfig `yaml:"http_client_config,inline"`
-	Body             string                  `yaml:"body,omitempty"`
-	Headers          map[string]string       `yaml:"headers,omitempty"`
-	Method           string                  `yaml:"method,omitempty"`
-	ValidStatusCodes []int                   `yaml:"valid_status_codes,omitempty"`
+	HTTPClientConfig promconfig.HTTPClientConfig `yaml:"http_client_config,inline"`
+	Body             string                      `yaml:"body,omitempty"`
+	Headers          map[string]string           `yaml:"headers,omitempty"`
+	Method           string                      `yaml:"method,omitempty"`
+	ValidStatusCodes []int                       `yaml:"valid_status_codes,omitempty"`
+	MaxConnectTime   time.Duration               `yaml:"max_connect_time"`
+}
+
+func (h *HTTPConfig) UnmarshalYAML(value *yaml.Node) error {
+	type plain HTTPConfig
+	err := value.Decode((*plain)(h))
+	if err != nil {
+		return err
+	}
+	if h.MaxConnectTime == time.Duration(0) {
+		h.MaxConnectTime = DatasourceDefaultConnectTimeout
+	}
+	if h.MaxConnectTime < time.Millisecond {
+		return fmt.Errorf("timeout value cannot be less than 1 ms: timeout=%s", h.MaxConnectTime)
+	}
+	return nil
 }
 
 func (h HTTPConfig) GetStream(ctx context.Context, name, targetURL string) (io.ReadCloser, error) {
-	client, err := config.NewClientFromConfig(h.HTTPClientConfig, name, config.WithKeepAlivesDisabled())
+	dialerFunc := func(ctx context.Context, network string, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(network, addr, h.MaxConnectTime)
+		if err != nil {
+			return nil, err
+		}
+		return conn, nil
+	}
+	client, err := promconfig.NewClientFromConfig(h.HTTPClientConfig, name, promconfig.WithKeepAlivesDisabled(), promconfig.WithDialContextFunc(dialerFunc))
 	if err != nil {
 		return nil, err
 	}
@@ -185,8 +209,9 @@ type Datasource struct {
 }
 
 var (
-	DefaultHttpConfig        = HTTPConfig{Method: "GET"}
-	DatasourceDefaultTimeout = time.Second * 30
+	DefaultHttpConfig               = HTTPConfig{Method: "GET"}
+	DatasourceDefaultTimeout        = time.Second * 30
+	DatasourceDefaultConnectTimeout = time.Second * 3
 )
 
 const DefaultMaxContent = 102400000
