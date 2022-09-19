@@ -1,0 +1,24 @@
+collects:
+  - name: "spring_actuator"
+    data_format: "json"
+    datasource:
+      - url: "http://172.18.0.2:8080/actuator/health"
+        timeout: "3s"
+        config:
+          max_connect_time: 1s
+    metrics:
+      - match: # 匹配规则
+          datapoint: 'components|@expand|@to_entries'
+          labels:
+            status: "value"
+            __name__: "key"
+        relabel_configs:
+          - source_labels: [status]
+            regex: "^(UP|DOWN)$"
+            action: keep
+      - name: "diskspace"
+        match: # 匹配规则
+          datapoint: 'components.diskSpace.details|@to_entries'
+          labels:
+            __value__: "value"
+            name: "key"
