@@ -150,3 +150,42 @@ func (t NetConfig) GetStream(ctx context.Context, _, targetURL string) (io.ReadC
 	}
 	return NewConnReader(conn, *t.MaxTransferTime), nil
 }
+
+type SendConfig struct {
+	Msg   string        `yaml:"msg,omitempty"`
+	Delay time.Duration `yaml:"delay,omitempty"`
+}
+
+func (s *SendConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value.ShortTag() == "!!str" {
+		var v string
+		if err := value.Decode(&v); err != nil {
+			return err
+		}
+		s.Msg = v
+		return nil
+	} else {
+		type plain SendConfig
+		return value.Decode((*plain)(s))
+	}
+}
+
+type SendConfigs []SendConfig
+
+func (s *SendConfigs) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		type plain SendConfigs
+		return value.Decode((*plain)(s))
+	} else if value.Kind == yaml.MappingNode || value.ShortTag() == "!!str" {
+		c := SendConfig{}
+		if err := value.Decode(&c); err != nil {
+			return err
+		}
+		*s = append(*s, c)
+		return nil
+	} else if value.Kind == yaml.AliasNode {
+		return value.Alias.Decode(s)
+	} else {
+		return fmt.Errorf("unsupport type, expected map, list, or string, position: Line: %d,Column:%d", value.Line, value.Column)
+	}
+}
