@@ -54,13 +54,19 @@ func New(config *Config) log.Logger {
 		config.Level = &promlog.AllowedLevel{}
 	}
 	if config.Level.String() == "" {
-		config.Level.Set("info")
+		err := config.Level.Set("info")
+		if err != nil {
+			panic(err)
+		}
 	}
 	if config.Format == nil {
 		config.Format = &AllowedFormat{}
 	}
 	if config.Format.String() == "" {
-		config.Format.Set("logfmt")
+		err := config.Format.Set("logfmt")
+		if err != nil {
+			panic(err)
+		}
 	}
 	switch config.Format.String() {
 	case "debug":
