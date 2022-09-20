@@ -145,28 +145,28 @@ type Streamer interface {
 }
 
 type Datasource struct {
-	Name                 string             `yaml:"name"`
+	Name                 string             `yaml:"name,omitempty"`
 	Url                  string             `yaml:"url"`
-	AllowReplace         bool               `yaml:"allow_replace"`
+	AllowReplace         bool               `yaml:"allow_replace,omitempty"`
 	Type                 DatasourceType     `yaml:"type"`
 	Timeout              time.Duration      `yaml:"timeout"`
-	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs"`
+	RelabelConfigs       RelabelConfigs     `yaml:"relabel_configs,omitempty"`
 	MaxContentLength     *int64             `yaml:"max_content_length"`
-	MinContentLength     *int               `yaml:"min_content_length"`
+	MinContentLength     *int               `yaml:"min_content_length,omitempty"`
 	LineMaxContentLength *int               `yaml:"line_max_content_length"`
 	LineSeparator        buffer.SliceString `yaml:"line_separator"`
 	r                    io.ReadCloser
-	EndOf                string             `yaml:"end_of"`
+	EndOf                string             `yaml:"end_of,omitempty"`
 	ReadMode             DatasourceReadMode `yaml:"read_mode"`
-	Config               Streamer           `yaml:"_config"`
+	Config               Streamer           `yaml:"-"`
 	Whence               int                `yaml:"whence"`
 
 	// Deprecated
-	HTTPConfig *HTTPConfig `yaml:"http"`
+	HTTPConfig *HTTPConfig `yaml:"http,omitempty"`
 	// Deprecated
-	TCPConfig *NetConfig `yaml:"tcp"`
+	TCPConfig *NetConfig `yaml:"tcp,omitempty"`
 	// Deprecated
-	UDPConfig *NetConfig `yaml:"udp"`
+	UDPConfig *NetConfig `yaml:"udp,omitempty"`
 }
 
 var (
@@ -178,6 +178,19 @@ var (
 const DefaultMaxContent = 102400000
 
 var ErrorDataTooSort = errors.New("data is too short")
+
+func (d *Datasource) MarshalYAML() (interface{}, error) {
+	type plain Datasource
+	type T struct {
+		Config Streamer `yaml:"config"`
+		*plain `yaml:",inline"`
+	}
+	var ds = T{
+		plain:  (*plain)(d),
+		Config: d.Config,
+	}
+	return &ds, nil
+}
 
 func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 	type plain Datasource
@@ -278,6 +291,9 @@ func (d *Datasource) UnmarshalYAML(value *yaml.Node) error {
 			d.LineSeparator = []string{"\n"}
 		}
 	}
+	d.HTTPConfig = nil
+	d.TCPConfig = nil
+	d.UDPConfig = nil
 	return nil
 }
 

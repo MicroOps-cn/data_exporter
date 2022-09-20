@@ -98,8 +98,8 @@ func (mc *MetricConfig) BuildTemplate(pointPrefix string) (err error) {
 }
 
 type MetricConfig struct {
-	Name           string         `yaml:"name"`
-	RelabelConfigs RelabelConfigs `yaml:"relabel_configs"`
+	Name           string         `yaml:"name,omitempty"`
+	RelabelConfigs RelabelConfigs `yaml:"relabel_configs,omitempty"`
 	Match          MetricMatch    `yaml:"match"`
 	MetricType     MetricType     `yaml:"metric_type"`
 	logger         log.Logger

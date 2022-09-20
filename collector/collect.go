@@ -57,8 +57,8 @@ const (
 )
 
 type CollectConfig struct {
-	Name           string
-	RelabelConfigs RelabelConfigs `yaml:"relabel_configs"`
+	Name           string         `yaml:"name,omitempty"`
+	RelabelConfigs RelabelConfigs `yaml:"relabel_configs,omitempty"`
 	DataFormat     DataFormat     `yaml:"data_format"`
 	Datasource     []*Datasource  `yaml:"datasource"`
 	Metrics        MetricConfigs  `yaml:"metrics"`

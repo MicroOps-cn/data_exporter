@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	stdlog "log"
 	"net"
@@ -60,6 +61,8 @@ var (
 	listenAddress = runFlagSet.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9116").String()
 	routePrefix   = runFlagSet.Flag("web.route-prefix", "Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").PlaceHolder("<path>").String()
 	externalURL   = runFlagSet.Flag("web.external-url", "The URL under which Blackbox exporter is externally reachable (for example, if Blackbox exporter is served via a reverse proxy). Used for generating relative and absolute links back to Blackbox exporter itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by Blackbox exporter. If omitted, relevant URL components will be derived automatically.").PlaceHolder("<url>").String()
+
+	displayConfig = verifyFlagSet.Flag("config.display", "display configuration").Bool()
 
 	// Deprecated
 	configFile = flagSet.Flag("config.file", "[Deprecated]Blackbox exporter configuration file.").String()
@@ -142,6 +145,9 @@ func init() {
 	})
 	verifyFlagSet.Action(func(_ *kingpin.ParseContext) error {
 		level.Info(rootLogger).Log("msg", "Config file is ok, exiting...")
+		if *displayConfig {
+			_ = yaml.NewEncoder(os.Stdout).Encode(sc.GetConfig())
+		}
 		return nil
 	})
 }
