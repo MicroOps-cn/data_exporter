@@ -20,6 +20,10 @@ func M[T any](ret T, err error) T {
 	return ret
 }
 
+func P[T any](o T) *T {
+	return &o
+}
+
 //func Must[T any](ret T, err error) T {
 //	return M[T](ret, err)
 //}

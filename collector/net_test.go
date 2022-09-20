@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/prometheus/common/config"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -125,7 +125,8 @@ func runServ(t *testings.T, protocol, addr string, tlsConfig *tls.Config) io.Clo
 		go func() {
 			for {
 				conn, err := listen.Accept()
-				if err != nil && assert.Contains(t.T, err.Error(), "use of closed network connection") {
+				if err != nil {
+					require.Contains(t.T, err.Error(), "use of closed network connection")
 					break
 				}
 				t.Logf("[S]连接已建立, %s", conn.RemoteAddr())
@@ -149,7 +150,8 @@ func runServ(t *testings.T, protocol, addr string, tlsConfig *tls.Config) io.Clo
 				for {
 					var data [4096]byte
 					n, addr, err := conn.ReadFromUDP(data[:]) // 接收数据
-					if err != nil && assert.Contains(t.T, err.Error(), "use of closed network connection") {
+					if err != nil {
+						require.Contains(t.T, err.Error(), "use of closed network connection")
 						break
 					}
 					if strings.TrimSpace(string(data[:n])) == "get_data" {

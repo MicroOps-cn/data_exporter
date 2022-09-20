@@ -17,7 +17,6 @@ import (
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/model"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
@@ -56,12 +55,6 @@ var xmlContent = `
 <root>
 `
 
-func AssertNoError(t *testing.T, err error) {
-	if !assert.NoError(t, err) {
-		os.Exit(1)
-	}
-}
-
 func TestMetricConfig_GetMetricByXml(t *testing.T) {
 	var err error
 	mcs := []MetricConfig{{
@@ -97,7 +90,7 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 	}}
 	for _, mc := range mcs {
 		err = mc.BuildTemplate("")
-		AssertNoError(t, err)
+		require.NoError(t, err)
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
@@ -106,9 +99,9 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 		}()
 		for metric := range metrics {
 			m, err := metric.getMetric()
-			AssertNoError(t, err)
+			require.NoError(t, err)
 			dtoMetric := dto.Metric{}
-			AssertNoError(t, m.Write(&dtoMetric))
+			require.NoError(t, m.Write(&dtoMetric))
 			t.Log(dtoMetric.String())
 		}
 	}
@@ -195,7 +188,7 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 	}}
 	for _, mc := range mcs {
 		err = mc.BuildRegexp("")
-		AssertNoError(t, err)
+		require.NoError(t, err)
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
@@ -204,9 +197,9 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 		}()
 		for metric := range metrics {
 			m, err := metric.getMetric()
-			AssertNoError(t, err)
+			require.NoError(t, err)
 			dtoMetric := dto.Metric{}
-			AssertNoError(t, m.Write(&dtoMetric))
+			require.NoError(t, m.Write(&dtoMetric))
 			t.Log(dtoMetric.String())
 		}
 	}
@@ -287,7 +280,7 @@ func TestMetricConfig_GetMetricByValues(t *testing.T) {
 	}}
 	for _, mc := range mcs {
 		err = mc.BuildTemplate("")
-		AssertNoError(t, err)
+		require.NoError(t, err)
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
@@ -306,7 +299,7 @@ func TestMetricConfig_GetMetricByValues(t *testing.T) {
 			for _, m := range ms {
 				if m != nil {
 					dtoMetric := dto.Metric{}
-					AssertNoError(t, m.Write(&dtoMetric))
+					require.NoError(t, m.Write(&dtoMetric))
 					require.Contains(t, dtoMetric.String(), `label:<name:"type" value:`)
 					dtoMetrics = append(dtoMetrics, dtoMetric)
 				}
