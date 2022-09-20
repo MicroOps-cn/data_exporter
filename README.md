@@ -152,6 +152,7 @@ datasource:
       headers: { <string>: <string>, ... } # 自定义HTTP头
       method: <string> #HTTP请求方法 GET/POST/PUT...
       valid_status_codes: [ <number>,... ] # 有效的状态码,默认为200~299
+      max_connect_time: <duration> # 最大建立连接的时长（不包含数据传输），如果超过该时间连接仍未建立成功，会返回失败。默认为3秒
     end_of: # 报文结束标志，当读取到该标志，则会停止继续读取并关闭连接，只有在read_mode为line的时候有效。报文为行缓冲，所以end_of的值不能为多行。
     max_content_length: <int> # 读取最大长度，单位为字节，如果"read_mode"值为stream, 该值默认为0 (不限制),否则默认值为 102400000
     min_content_length: <int> # 读取最小长度，单位为字节，默认值为0 (不限制)，只有在read_mode为full的时候有效。
