@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/collector"
 	"github.com/MicroOps-cn/data_exporter/config"
-	"github.com/MicroOps-cn/data_exporter/testings"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -62,10 +61,7 @@ collects:
           action: templexec
           template: "{{ .|parseInt 0 64 }}"
       match:
-        datapoint: "data|@expand|@expand|@to_entries:name:value"
-        labels:
-          __value__: "value"
-          __name__: "name"
+        datapoint: "data|@expand|@expand|@to_entries:__name__:__value__"
 - name: "weather"
   relabel_configs:
     - target_label: __namespace__
@@ -106,11 +102,7 @@ collects:
 `
 
 func init() {
-	err := os.Chdir("..")
-	if err != nil {
-		panic(err)
-	}
-
+	_ = os.Chdir("..")
 	defaultTimeout, err := time.ParseDuration("30s")
 	if err != nil {
 		panic(err)
@@ -146,27 +138,23 @@ collects:
           action: templexec
           template: "{{ . }}"
       match:
-        datapoint: "data|@expand|@expand|@to_entries:name:value"
-        labels:
-          __value__: "value"
-          __name__: "name"
+        datapoint: "data|@expand|@expand|@to_entries:__name__:__value__"
 `
 
 func TestStreamCollect(t *testing.T) {
 	sc := config.NewSafeConfig()
-	tt := testings.NewTesting(t)
 	rand.Seed(time.Now().UTC().UnixNano())
 	logger := log.NewLogfmtLogger(os.Stdout)
 
 	addr := fmt.Sprintf("127.0.1.1:%d", rand.Intn(50000)+15530)
-	tt.Logf("start %s listen serv: %s", collector.Tcp.ToLowerString(), addr)
+	t.Logf("start %s listen serv: %s", collector.Tcp.ToLowerString(), addr)
 	listen, err := net.Listen("tcp", addr)
-	tt.AssertNoError(err)
+	require.NoError(t, err)
 	go func() {
 		for {
 			conn, _ := listen.Accept()
 			if conn != nil {
-				tt.Logf("accept connect from clinet: %s", conn.RemoteAddr())
+				t.Logf("accept connect from clinet: %s", conn.RemoteAddr())
 				go func(c net.Conn) {
 					var i = 0
 					for {
@@ -174,7 +162,7 @@ func TestStreamCollect(t *testing.T) {
 						var data = `{"data":{"server1":{"metrics":{"Memory":"%d","CPU":"10"}},"server2":{"metrics":{"Memory":"21293728632","CPU":"%d"}}},"code":0}`
 						unix := time.Now().Unix()
 						_, werr := c.Write([]byte(fmt.Sprintf(data+"\n", unix, i)))
-						tt.AssertNoError(werr)
+						require.NoError(t, werr)
 						time.Sleep(time.Second)
 					}
 				}(conn)
@@ -183,7 +171,7 @@ func TestStreamCollect(t *testing.T) {
 	}()
 	defer func() {
 		time.Sleep(time.Second)
-		tt.Logf("stop %s listen serv: %s", collector.Tcp.ToLowerString(), addr)
+		t.Logf("stop %s listen serv: %s", collector.Tcp.ToLowerString(), addr)
 		listen.Close()
 	}()
 
@@ -193,14 +181,14 @@ func TestStreamCollect(t *testing.T) {
 	decoder.KnownFields(true)
 
 	if err = decoder.Decode(c); err != nil {
-		tt.AssertNoError(err)
+		require.NoError(t, err)
 	}
 	ds := c.Collects[0].Datasource[0]
 	ds.Name = fmt.Sprintf("Test %s Datasource", collector.Tcp.ToLowerString())
 	ds.Url = addr
 	sc.SetConfig(c)
 	err = c.Init(logger)
-	tt.AssertNoError(err)
+	require.NoError(t, err)
 	time.Sleep(time.Second)
 
 	for i := 0; i < 10; i++ {
@@ -212,35 +200,35 @@ func TestStreamCollect(t *testing.T) {
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tt.Log("get metric")
+			t.Log("get metric")
 			server.collectMetricsByName(logger, "test-tcp-json", w, r)
 		})
 		handler.ServeHTTP(rr, req)
-		tt.AssertEqual(rr.Code, 200)
+		require.Equal(t, rr.Code, 200)
 		body := rr.Body.String()
-		tt.Contains(body, `server_cpu{name="server1"}`)
+		require.Contains(t, body, `server_cpu{name="server1"}`)
 		exp := regexp.MustCompile(`server_memory\{name="server1"\} (\S+)`)
 		match := exp.FindStringSubmatch(body)
-		tt.AssertEqual(len(match), 2)
+		require.Equal(t, len(match), 2)
 		val, err := strconv.ParseFloat(match[1], 64)
-		tt.AssertNoError(err)
+		require.NoError(t, err)
 		delta := time.Now().Unix() - int64(val)
-		tt.AssertEqual(delta >= 0 && delta <= 2, true)
+		require.Equal(t, delta >= 0 && delta <= 2, true)
 		time.Sleep(time.Second - time.Millisecond*400)
 	}
 }
 
 func TestCollectMetrics(t *testing.T) {
 	sc := config.NewSafeConfig()
-	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
+	require.NoError(t, sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("examples/weather.xml")
-		tt.AssertNoError(err)
+		require.NoError(t, err)
 		defer f.Close()
-		tt.AssertNoError(io.Copy(w, f))
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
 	}))
 	time.Sleep(time.Second)
 	defer ts.Close()
@@ -258,7 +246,7 @@ func TestCollectMetrics(t *testing.T) {
 		server.collectMetrics(logger, w, r)
 	})
 	handler.ServeHTTP(rr, req)
-	tt.AssertEqual(rr.Code, 200)
+	require.Equal(t, rr.Code, 200)
 	body := rr.Body.String()
 	require.Contains(t, body, `weather_temperature_week{name="黑龙江",zone="china"} 18`)
 	require.Contains(t, body, `weather_temperature_hour{name="吉林",zone="china"} 16`)
@@ -267,15 +255,15 @@ func TestCollectMetrics(t *testing.T) {
 
 func TestCollectMetricsByName(t *testing.T) {
 	sc := config.NewSafeConfig()
-	tt := testings.NewTesting(t)
 	logger := log.NewLogfmtLogger(os.Stdout)
 	reader := bytes.NewReader([]byte(yamlConfigContent))
-	tt.AssertNoError(sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
+	require.NoError(t, sc.ReloadConfigFromReader(io.NopCloser(reader), logger))
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("examples/weather.xml")
-		tt.AssertNoError(err)
+		require.NoError(t, err)
 		defer f.Close()
-		tt.AssertNoError(io.Copy(w, f))
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
 	}))
 	time.Sleep(time.Second)
 	defer ts.Close()
@@ -293,7 +281,7 @@ func TestCollectMetricsByName(t *testing.T) {
 		server.collectMetricsByName(logger, "test-http", w, r)
 	})
 	handler.ServeHTTP(rr, req)
-	tt.AssertEqual(rr.Code, 200)
+	require.Equal(t, rr.Code, 200)
 	body := rr.Body.String()
 	require.NotContains(t, body, `weather_temperature_week{name="黑龙江",zone="china"} 18`)
 	require.NotContains(t, body, `weather_temperature_hour{name="吉林",zone="china"} 16`)
@@ -312,6 +300,7 @@ func TestHTTPRoute(t *testing.T) {
 		pprofUrl    string
 		routePrefix string
 		externalURL string
+		enableUi    bool
 		uiPrefix    string
 	}
 	type want struct {
@@ -395,6 +384,8 @@ func TestHTTPRoute(t *testing.T) {
 			*pprofUrl = tt.args.pprofUrl
 			*routePrefix = tt.args.routePrefix
 			*externalURL = tt.args.externalURL
+			*enableUi = tt.args.enableUi
+			*uiPrefix = tt.args.uiPrefix
 			server, err := NewHttpServer(logger, sc)
 			if tt.want.newHttpServerError {
 				require.Error(t, err)

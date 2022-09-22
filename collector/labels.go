@@ -87,6 +87,19 @@ func (re *Regexp) UnmarshalYAML(value *yaml.Node) error {
 	}
 	return nil
 }
+func (re *Regexp) UnmarshalJSON(raw []byte) error {
+	var regex string
+	if err := json.Unmarshal(raw, &regex); err != nil {
+		return err
+	} else if len(regex) != 0 {
+		if r, err := NewRegexp(regex); err != nil {
+			return err
+		} else {
+			*re = r
+		}
+	}
+	return nil
+}
 
 type Action string
 
@@ -112,7 +125,7 @@ const (
 type RelabelConfig struct {
 	// A list of labels from which values are taken and concatenated
 	// with the configured separator in order.
-	SourceLabels model.LabelNames `yaml:"source_labels,flow,omitempty"`
+	SourceLabels model.LabelNames `yaml:"source_labels,flow,omitempty" json:"source_labels"`
 	// Separator is the string between concatenated values from the source labels.
 	Separator string `yaml:"separator,omitempty"`
 	// Regex against which the concatenation is matched.
@@ -123,7 +136,7 @@ type RelabelConfig struct {
 	Modulus uint64 `yaml:"modulus,omitempty"`
 	// TargetLabel is the label to which the resulting string is written in a replacement.
 	// Regexp interpolation is allowed for the replace action.
-	TargetLabel string `yaml:"target_label,omitempty"`
+	TargetLabel string `yaml:"target_label,omitempty" json:"target_label"`
 	// Replacement is the regex replacement pattern to be used.
 	Replacement string `yaml:"replacement,omitempty"`
 	// Action is the action to be performed for the relabeling.
@@ -150,12 +163,7 @@ func (rcs RelabelConfigs) String() string {
 	return string(marshal)
 }
 
-func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
-	*c = DefaultRelabelConfig
-	type plain RelabelConfig
-	if err := value.Decode((*plain)(c)); err != nil {
-		return err
-	}
+func (c *RelabelConfig) init() error {
 	if c.Regex.Regexp == nil {
 		c.Regex = MustNewRegexp("")
 	}
@@ -190,9 +198,24 @@ func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
 			return fmt.Errorf("%s action requires only 'regex', and no other fields", c.Action)
 		}
 	}
-
 	return nil
+}
 
+func (c *RelabelConfig) UnmarshalJSON(raw []byte) error {
+	*c = DefaultRelabelConfig
+	type plain RelabelConfig
+	if err := json.Unmarshal(raw, (*plain)(c)); err != nil {
+		return err
+	}
+	return c.init()
+}
+func (c *RelabelConfig) UnmarshalYAML(value *yaml.Node) error {
+	*c = DefaultRelabelConfig
+	type plain RelabelConfig
+	if err := value.Decode((*plain)(c)); err != nil {
+		return err
+	}
+	return c.init()
 }
 
 // Process returns a relabeled copy of the given label set. The relabel configurations

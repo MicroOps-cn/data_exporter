@@ -14,6 +14,8 @@
 package collector
 
 import (
+	"encoding/json"
+	"github.com/MicroOps-cn/data_exporter/pkg/wrapper"
 	"github.com/go-kit/log"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/model"
@@ -94,7 +96,23 @@ func TestMetricConfig_GetMetricByXml(t *testing.T) {
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
-			mc.GetMetricByXml(logger, []byte(xmlContent), mc.RelabelConfigs, metrics)
+			dps := mc.GetDatapointsByRegex(logger, []byte(xmlContent))
+			for _, dp := range dps {
+				m := MetricGenerator{
+					logger:     logger,
+					MetricType: mc.MetricType,
+					Name:       mc.Name,
+					Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+				}
+				for name, val := range dp {
+					m.Labels.Append(name, val)
+				}
+				m.Labels, err = mc.Relabels(logger, mc.RelabelConfigs, m.Labels)
+				if err != nil {
+					continue
+				}
+				metrics <- m
+			}
 			close(metrics)
 		}()
 		for metric := range metrics {
@@ -192,7 +210,23 @@ func TestMetricConfig_GetMetricByRegex(t *testing.T) {
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
-			mc.GetMetricByRegex(logger, []byte(textContent), mc.RelabelConfigs, metrics)
+			dps := mc.GetDatapointsByRegex(logger, []byte(textContent))
+			for _, dp := range dps {
+				m := MetricGenerator{
+					logger:     logger,
+					MetricType: mc.MetricType,
+					Name:       mc.Name,
+					Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+				}
+				for name, val := range dp {
+					m.Labels.Append(name, val)
+				}
+				m.Labels, err = mc.Relabels(logger, mc.RelabelConfigs, m.Labels)
+				if err != nil {
+					continue
+				}
+				metrics <- m
+			}
 			close(metrics)
 		}()
 		for metric := range metrics {
@@ -284,16 +318,32 @@ func TestMetricConfig_GetMetricByValues(t *testing.T) {
 		metrics := make(chan MetricGenerator, 3)
 		logger := log.NewLogfmtLogger(os.Stderr)
 		go func() {
-			mc.GetMetricByXml(logger, []byte(valuesXmlContent), mc.RelabelConfigs, metrics)
+			dps := mc.GetDatapointsByXml(logger, []byte(valuesXmlContent))
+			for _, dp := range dps {
+				m := MetricGenerator{
+					logger:     logger,
+					MetricType: mc.MetricType,
+					Name:       mc.Name,
+					Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+				}
+				for name, val := range dp {
+					m.Labels.Append(name, val)
+				}
+				m.Labels, err = mc.Relabels(logger, mc.RelabelConfigs, m.Labels)
+				if err != nil {
+					continue
+				}
+				metrics <- m
+			}
 			close(metrics)
 		}()
 		var errors []error
 		var dtoMetrics []dto.Metric
 		for metric := range metrics {
-			ms, errs := metric.getMetrics()
-			for _, err = range errs {
-				if err != nil {
-					errors = append(errors, err)
+			ms, errs := metric.GetMetrics()
+			for _, e := range errs {
+				if e != nil {
+					errors = append(errors, e)
 				}
 			}
 			for _, m := range ms {
@@ -307,5 +357,32 @@ func TestMetricConfig_GetMetricByValues(t *testing.T) {
 		}
 		require.Equal(t, len(dtoMetrics), 24)
 		require.Equal(t, len(errors), 6)
+	}
+}
+
+func TestDatapoint_UnmarshalJSON(t *testing.T) {
+	type args struct {
+		raw []byte
+	}
+	tests := []struct {
+		name    string
+		d       Datapoint
+		args    args
+		wantErr bool
+	}{{
+		name: "test - json string",
+		args: args{raw: wrapper.M[[]byte](json.Marshal(`{"name": "server1.metrics.Memory", "value": "0x1000000000"}`))},
+		d:    Datapoint{"name": "server1.metrics.Memory", "value": "0x1000000000"},
+	}, {
+		name: "test - string",
+		args: args{raw: []byte(`{"name": "server1.metrics.Memory", "value": "0x1000000000"}`)},
+		d:    Datapoint{"name": "server1.metrics.Memory", "value": "0x1000000000"},
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.d.UnmarshalJSON(tt.args.raw); (err != nil) != tt.wantErr {
+				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

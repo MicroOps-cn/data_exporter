@@ -166,19 +166,38 @@ func (c *CollectConfig) GetMetricByDs(ctx context.Context, logger log.Logger, ds
 	}
 }
 func (c *CollectConfig) GetMetric(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+	var err error
 	for _, mc := range c.Metrics {
+		var dps []Datapoint
 		rcs = append(rcs, mc.RelabelConfigs...)
 		metricLogger := log.With(logger, "metric", mc.Name)
 		level.Debug(metricLogger).Log("title", "Raw Data", "data_format", c.DataFormat, "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
 		switch c.DataFormat.ToLower() {
 		case Regex:
-			mc.GetMetricByRegex(metricLogger, data, rcs, metrics)
+			dps = mc.GetDatapointsByRegex(metricLogger, data)
 		case Json:
-			mc.GetMetricByJson(metricLogger, data, rcs, metrics)
+			dps = mc.GetDatapointsByJson(metricLogger, data)
 		case Xml:
-			mc.GetMetricByXml(metricLogger, data, rcs, metrics)
+			dps = mc.GetDatapointsByXml(metricLogger, data)
 		case Yaml:
-			mc.GetMetricByYaml(metricLogger, data, rcs, metrics)
+			dps = mc.GetDatapointsByYaml(metricLogger, data)
+		}
+
+		for _, dp := range dps {
+			m := MetricGenerator{
+				logger:     logger,
+				MetricType: mc.MetricType,
+				Name:       mc.Name,
+				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+			}
+			for name, val := range dp {
+				m.Labels.Append(name, val)
+			}
+			m.Labels, err = mc.Relabels(logger, rcs, m.Labels)
+			if err != nil {
+				continue
+			}
+			metrics <- m
 		}
 	}
 }
@@ -273,7 +292,7 @@ func (c *CollectContext) Describe(_ chan<- *prometheus.Desc) {
 }
 
 func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
-	metrics := make(chan MetricGenerator, 10)
+	mgs := NewMetricGenerators(10, c.logger)
 	go func() {
 		wg := sync.WaitGroup{}
 		for i := range c.Datasource {
@@ -291,20 +310,43 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 				wg.Add(1)
 				go func(idx int) {
 					defer wg.Done()
-					c.GetMetricByDs(c.Context, c.logger, &ds, metrics)
+					c.GetMetricByDs(c.Context, c.logger, &ds, mgs.metrics)
 				}(i)
 			}
 		}
 		wg.Wait()
-		close(metrics)
+		close(mgs.metrics)
 	}()
-	for metric := range metrics {
+	mgs.Collect(proMetrics)
+	c.metrics.Collect(proMetrics)
+}
+
+type MetricGenerators struct {
+	metrics chan MetricGenerator
+	logger  log.Logger
+}
+
+func NewMetricGenerators(size int, logger log.Logger) *MetricGenerators {
+	return &MetricGenerators{
+		metrics: make(chan MetricGenerator, 10),
+		logger:  logger,
+	}
+}
+
+func (*MetricGenerators) Describe(_ chan<- *prometheus.Desc) {
+}
+
+func (mgs *MetricGenerators) Ch() chan MetricGenerator {
+	return mgs.metrics
+}
+func (mgs *MetricGenerators) Collect(proMetrics chan<- prometheus.Metric) {
+	for metric := range mgs.metrics {
 		if metric.Labels.Has(LabelMetricValues) {
-			ms, errs := metric.getMetrics()
+			ms, errs := metric.GetMetrics()
 			for _, err := range errs {
 				if err != nil {
 					collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
-					level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
+					level.Error(log.With(mgs.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
 				}
 			}
 			for _, m := range ms {
@@ -316,14 +358,12 @@ func (c *CollectContext) Collect(proMetrics chan<- prometheus.Metric) {
 			m, err := metric.getMetric()
 			if err != nil {
 				collectErrorCount.WithLabelValues("metric", metric.Name).Inc()
-				level.Error(log.With(c.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
+				level.Error(log.With(mgs.logger, "metric", metric.Name)).Log("log", "failed to get prometheus metric", "err", err)
 			} else {
 				proMetrics <- m
 			}
 		}
-
 	}
-	c.metrics.Collect(proMetrics)
 }
 
 type Collects []CollectConfig

@@ -15,6 +15,7 @@ package collector
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -130,6 +131,19 @@ func (t *Template) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	} else if len(tmplStr) != 0 {
 
+		if tmpl, err := NewTemplate("", tmplStr); err != nil {
+			return err
+		} else {
+			*t = *tmpl
+		}
+	}
+	return nil
+}
+func (t *Template) UnmarshalJSON(raw []byte) error {
+	var tmplStr string
+	if err := json.Unmarshal(raw, &tmplStr); err != nil {
+		return err
+	} else if len(tmplStr) != 0 {
 		if tmpl, err := NewTemplate("", tmplStr); err != nil {
 			return err
 		} else {

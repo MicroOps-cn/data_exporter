@@ -38,13 +38,32 @@ make common-build && docker build -t data_exporter .
 
 #### debug config file
 
+##### Debugging in cli
+
 ```shell
 ./data_exporter --config.path="data_exporter.yaml" --log.level=debug
 ```
+
 Or use docker:
+
 ```bash
 docker run  -it --rm -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter debug  
 ```
+
+##### Debugging in web ui
+
+```shell
+./data_exporter --config.path="data_exporter.yaml" --web.ui-enable
+```
+
+Or use docker:
+
+```bash
+docker run  -it --rm -v `pwd`:/etc/data_exporter/ -p 9116:9116 --name data_exporter microops/data_exporter --web.ui-enable  
+```
+
+Then visit `http://localhost:9116/-/ui/static/`
+![](./docs/images/debug-ui.png)
 
 #### running examples
 

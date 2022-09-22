@@ -1,0 +1,44 @@
+/*
+  Copyright 2021 MicroOps
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+.CodeBoxToolbar {
+  position: absolute;
+  right: 0;
+  z-index: 1000;
+  filter: alpha(Opacity=80);
+  -moz-opacity: 0.5;
+  opacity: 0.5;
+  padding: 5px;
+}
+
+.CodeBoxToolbar:hover {
+  filter: unset;
+  -moz-opacity: unset;
+  opacity: unset;
+}
+
+.CodeBox {
+  box-shadow: 0px 10px 10px rgb(0 0 0 / 30%);
+  border-radius: 10px;
+}
+
+.CodeBox>.CodeMirror {
+  border-radius: 10px;
+  padding: 7px;
+}
+
+.CodeBox .CodeMirror-placeholder {
+  color: rgb(178, 178, 178) !important;
+}

@@ -5,6 +5,7 @@ yaml-files:
 
 ignore: |
   pkg/tail@v1.0.0
+  ui/node_modules
 
 rules:
   braces: enable

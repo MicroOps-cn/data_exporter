@@ -13,3 +13,6 @@
 dist/
 .idea/
 data_exporter
+ui/node_modules
+ui/build
+/ui/yarn-error.log

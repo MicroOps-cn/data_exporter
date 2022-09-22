@@ -14,6 +14,8 @@
 package collector
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/MicroOps-cn/data_exporter/pkg/values"
 	"github.com/MicroOps-cn/data_exporter/pkg/wrapper"
@@ -97,12 +99,36 @@ func (mc *MetricConfig) BuildTemplate(pointPrefix string) (err error) {
 	return nil
 }
 
+type Datapoint map[string]string
+
+func (d *Datapoint) UnmarshalJSON(raw []byte) error {
+	if bytes.HasPrefix(raw, []byte{'"'}) {
+		var tmp string
+		if err := json.Unmarshal(raw, &tmp); err != nil {
+			return err
+		}
+		raw = []byte(tmp)
+	}
+	return json.Unmarshal(raw, (*map[string]string)(d))
+}
+
 type MetricConfig struct {
 	Name           string         `yaml:"name,omitempty"`
-	RelabelConfigs RelabelConfigs `yaml:"relabel_configs,omitempty"`
+	RelabelConfigs RelabelConfigs `yaml:"relabel_configs,omitempty" json:"relabel_configs"`
 	Match          MetricMatch    `yaml:"match"`
-	MetricType     MetricType     `yaml:"metric_type"`
+	MetricType     MetricType     `yaml:"metric_type" json:"metric_type"`
 	logger         log.Logger
+}
+
+func (mc *MetricConfig) UnmarshalJSON(raw []byte) error {
+	type plain MetricConfig
+	if err := json.Unmarshal(raw, (*plain)(mc)); err != nil {
+		return err
+	}
+	if mc.MetricType == "" {
+		mc.MetricType = Gauge
+	}
+	return nil
 }
 
 func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -116,7 +142,7 @@ func (mc *MetricConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (mc *MetricConfig) relabel(logger log.Logger, rcs RelabelConfigs, lvs Labels) (newLvs Labels, err error) {
+func (mc *MetricConfig) Relabels(logger log.Logger, rcs RelabelConfigs, lvs Labels) (newLvs Labels, err error) {
 	defer func() {
 		if err == nil {
 			level.Debug(logger).Log("title", "Relabel Process", "labels", newLvs, "oldLabels", lvs, "relabelConfigs", rcs)
@@ -141,8 +167,8 @@ func (mc *MetricConfig) relabel(logger log.Logger, rcs RelabelConfigs, lvs Label
 	return newLvs, nil
 }
 
-func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
-	var err error
+func (mc *MetricConfig) GetDatapointsByRegex(logger log.Logger, data []byte) []Datapoint {
+	var dps []Datapoint
 	var dds [][][]byte
 	var names []string
 	if mc.Match.datapointRegexp != nil {
@@ -152,53 +178,103 @@ func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs Rel
 	} else {
 		dds = [][][]byte{{data}}
 	}
-	for _, dd := range dds {
-		var (
-			m = MetricGenerator{
-				logger:     logger,
-				MetricType: mc.MetricType,
-				Name:       mc.Name,
-				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
-			}
-		)
-		if len(names) > 1 {
-			for idx, name := range names[1:] {
-				m.Labels.Append(name, string(dd[idx+1]))
+	if len(names) == 0 {
+		if len(dds) > 0 && len(dds[0]) > 0 {
+			dps = append(dps, Datapoint{"__line__": string(dds[0][0])})
+		}
+	} else {
+		for _, dd := range dds {
+			if len(dd) > 0 {
+				var dp = map[string]string{}
+				dp["__line__"] = string(dd[0])
+				for idx, name := range names[1:] {
+					dp[name] = string(dd[idx+1])
+				}
+				dps = append(dps, dp)
 			}
 		}
+	}
+	for i, dp := range dps {
 		for name, labelRegexp := range mc.Match.labelsRegexp {
-			dp := string(dd[0])
-			val := labelRegexp.FindStringSubmatch(dp)
-			level.Debug(logger).Log("title", "Label Match by Regex", "data", string(wrapper.Limit[byte]([]byte(dp), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
+			val := labelRegexp.FindStringSubmatch(dp["__line__"])
+			level.Debug(logger).Log("title", "Label Match by Regex", "data", string(wrapper.Limit[byte]([]byte(dp["__line__"]), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
 			if len(val) > 0 {
 				labelNames := labelRegexp.SubexpNames()
 				if len(labelNames) > 1 {
 					for idx, labelName := range labelNames[1:] {
 						if labelName == name {
-							m.Labels.Append(name, val[idx+1])
+							dps[i][name] = val[idx+1]
 							break
 						}
 					}
 				} else {
-					m.Labels.Append(name, val[0])
+					dps[i][name] = val[0]
 				}
 			}
 		}
-		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
-		if err != nil {
-			continue
-		}
-		metrics <- m
 	}
+	return dps
 }
-func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+
+//func (mc *MetricConfig) GetMetricByRegex(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//	var err error
+//	var dds [][][]byte
+//	var names []string
+//	if mc.Match.datapointRegexp != nil {
+//		names = mc.Match.datapointRegexp.SubexpNames()
+//		dds = mc.Match.datapointRegexp.FindAllSubmatch(data, -1)
+//		level.Debug(logger).Log("title", "Datapoint Match by Regex", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.datapointRegexp, "resultCount", len(dds))
+//	} else {
+//		dds = [][][]byte{{data}}
+//	}
+//	for _, dd := range dds {
+//		var (
+//			m = MetricGenerator{
+//				logger:     logger,
+//				MetricType: mc.MetricType,
+//				Name:       mc.Name,
+//				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+//			}
+//		)
+//		if len(names) > 1 {
+//			for idx, name := range names[1:] {
+//				m.Labels.Append(name, string(dd[idx+1]))
+//			}
+//		}
+//		for name, labelRegexp := range mc.Match.labelsRegexp {
+//			dp := string(dd[0])
+//			val := labelRegexp.FindStringSubmatch(dp)
+//			level.Debug(logger).Log("title", "Label Match by Regex", "data", string(wrapper.Limit[byte]([]byte(dp), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", labelRegexp, "result", fmt.Sprint(val), "label", name)
+//			if len(val) > 0 {
+//				labelNames := labelRegexp.SubexpNames()
+//				if len(labelNames) > 1 {
+//					for idx, labelName := range labelNames[1:] {
+//						if labelName == name {
+//							m.Labels.Append(name, val[idx+1])
+//							break
+//						}
+//					}
+//				} else {
+//					m.Labels.Append(name, val[0])
+//				}
+//			}
+//		}
+//		m.Labels, err = mc.Relabels(logger, rcs, m.Labels)
+//		if err != nil {
+//			continue
+//		}
+//		metrics <- m
+//	}
+//}
+
+func (mc *MetricConfig) GetDatapointsByJson(logger log.Logger, data []byte) []Datapoint {
 	jn := gjson.ParseBytes(data)
 	if len(mc.Match.Datapoint) != 0 {
 		jn = jn.Get(mc.Match.Datapoint)
 		level.Debug(logger).Log("title", "Datapoint Match By Gjson", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.Datapoint, "result", jn.Raw)
 	}
 	if len(jn.Raw) == 0 {
-		return
+		return nil
 	}
 	var jns []gjson.Result
 	if jn.IsArray() {
@@ -206,38 +282,72 @@ func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs Rela
 	} else {
 		jns = []gjson.Result{jn}
 	}
-	var err error
+	var results []Datapoint
 	for _, j := range jns {
-		var (
-			m = MetricGenerator{
-				logger:     logger,
-				MetricType: mc.MetricType,
-				Name:       mc.Name,
-				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
-			}
-		)
+		var result = Datapoint{"__line__": j.String()}
+		j.ForEach(func(key, value gjson.Result) bool {
+			result[key.String()] = value.String()
+			return true
+		})
 		for name, valMatch := range mc.Match.Labels {
 			val := j.Get(valMatch).String()
 			level.Debug(logger).Log("title", "Label Match by Gjson", "data", string(wrapper.Limit[byte]([]byte(j.Raw), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", valMatch, "result", val, "label", name)
 			if len(val) > 0 {
-				m.Labels.Append(name, val)
+				result[name] = val
 			}
 		}
-
-		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
-		if err != nil {
-			continue
-		}
-		metrics <- m
+		results = append(results, result)
 	}
+	return results
 }
 
-func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//func (mc *MetricConfig) GetMetricByJson(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//	jn := gjson.ParseBytes(data)
+//	if len(mc.Match.Datapoint) != 0 {
+//		jn = jn.Get(mc.Match.Datapoint)
+//		level.Debug(logger).Log("title", "Datapoint Match By Gjson", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.Datapoint, "result", jn.Raw)
+//	}
+//	if len(jn.Raw) == 0 {
+//		return
+//	}
+//	var jns []gjson.Result
+//	if jn.IsArray() {
+//		jns = jn.Array()
+//	} else {
+//		jns = []gjson.Result{jn}
+//	}
+//	var err error
+//	for _, j := range jns {
+//		var (
+//			m = MetricGenerator{
+//				logger:     logger,
+//				MetricType: mc.MetricType,
+//				Name:       mc.Name,
+//				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+//			}
+//		)
+//		for name, valMatch := range mc.Match.Labels {
+//			val := j.Get(valMatch).String()
+//			level.Debug(logger).Log("title", "Label Match by Gjson", "data", string(wrapper.Limit[byte]([]byte(j.Raw), 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", valMatch, "result", val, "label", name)
+//			if len(val) > 0 {
+//				m.Labels.Append(name, val)
+//			}
+//		}
+//
+//		m.Labels, err = mc.Relabels(logger, rcs, m.Labels)
+//		if err != nil {
+//			continue
+//		}
+//		metrics <- m
+//	}
+//}
+
+func (mc *MetricConfig) GetDatapointsByXml(logger log.Logger, data []byte) []Datapoint {
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse xml data.", "err", err, "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
-		return
+		return nil
 	}
 	var elems []*etree.Element
 	if mc.Match.datapointXmlPath != nil {
@@ -246,17 +356,9 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 	} else {
 		elems = []*etree.Element{&doc.Element}
 	}
-
+	var results []Datapoint
 	for _, elem := range elems {
-		var (
-			m = MetricGenerator{
-				logger:     logger,
-				MetricType: mc.MetricType,
-				Name:       mc.Name,
-				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
-			}
-		)
-
+		var result = Datapoint{"__line__": elem.Text()}
 		vdoc := etree.NewDocument()
 		vdoc.AddChild(elem.Copy())
 		elemRaw, err := vdoc.WriteToString()
@@ -276,26 +378,89 @@ func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs Relab
 				"exp", mc.Match.Labels[name], "result", val, "label", name)
 
 			if len(val) > 0 {
-				m.Labels.Append(name, string(val))
+				result[name] = string(val)
 			}
 		}
-		m.Labels, err = mc.relabel(logger, rcs, m.Labels)
-		if err != nil {
-			continue
-		}
-		metrics <- m
+		results = append(results, result)
 	}
+	return results
 }
 
-func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//func (mc *MetricConfig) GetMetricByXml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//	doc := etree.NewDocument()
+//	if err := doc.ReadFromBytes(data); err != nil {
+//		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
+//		level.Error(logger).Log("msg", "failed to parse xml data.", "err", err, "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
+//		return
+//	}
+//	var elems []*etree.Element
+//	if mc.Match.datapointXmlPath != nil {
+//		elems = doc.FindElementsPath(*mc.Match.datapointXmlPath)
+//		level.Debug(logger).Log("title", "Datapoint Match by XML(etree.FindElementsPath)", "data", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)), "exp", mc.Match.Datapoint, "resultCount", len(elems))
+//	} else {
+//		elems = []*etree.Element{&doc.Element}
+//	}
+//
+//	for _, elem := range elems {
+//		var (
+//			m = MetricGenerator{
+//				logger:     logger,
+//				MetricType: mc.MetricType,
+//				Name:       mc.Name,
+//				Labels:     Labels{Label{Name: "name", Value: mc.Name}},
+//			}
+//		)
+//
+//		vdoc := etree.NewDocument()
+//		vdoc.AddChild(elem.Copy())
+//		elemRaw, err := vdoc.WriteToString()
+//		if err != nil {
+//			level.Error(logger).Log("msg", "failed to parse xml data: failed to write to string.", "err", err)
+//		}
+//
+//		for name, labelMatch := range mc.Match.labelsTmpl {
+//			val, err := labelMatch.Execute(elem)
+//			if err != nil {
+//				collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
+//				level.Error(logger).Log("msg", "failed to parse xml data: failed to execute template.", "err", err)
+//				continue
+//			}
+//			level.Debug(logger).Log("title", "Label Match by XML(etree.FindElementsPath)", "data",
+//				string(wrapper.Limit[byte]([]byte(strings.TrimSpace(elemRaw)), 256, wrapper.PosCenter, []byte(" ... ")...)),
+//				"exp", mc.Match.Labels[name], "result", val, "label", name)
+//
+//			if len(val) > 0 {
+//				m.Labels.Append(name, string(val))
+//			}
+//		}
+//		m.Labels, err = mc.Relabels(logger, rcs, m.Labels)
+//		if err != nil {
+//			continue
+//		}
+//		metrics <- m
+//	}
+//}
+
+func (mc *MetricConfig) GetDatapointsByYaml(logger log.Logger, data []byte) []Datapoint {
 	if jsonData, err := yamlToJson(data, nil); err != nil {
 		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
 		level.Error(logger).Log("msg", "failed to parse yaml data.", "err", err, "yaml", data)
 	} else {
 		level.Debug(logger).Log("title", "YAML to JSON", "json", string(wrapper.Limit[byte](jsonData, 256, wrapper.PosCenter, []byte(" ... ")...)), "yaml", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
-		mc.GetMetricByJson(logger, jsonData, rcs, metrics)
+		return mc.GetDatapointsByJson(logger, jsonData)
 	}
+	return nil
 }
+
+//func (mc *MetricConfig) GetMetricByYaml(logger log.Logger, data []byte, rcs RelabelConfigs, metrics chan<- MetricGenerator) {
+//	if jsonData, err := yamlToJson(data, nil); err != nil {
+//		collectErrorCount.WithLabelValues("metric", mc.Name).Inc()
+//		level.Error(logger).Log("msg", "failed to parse yaml data.", "err", err, "yaml", data)
+//	} else {
+//		level.Debug(logger).Log("title", "YAML to JSON", "json", string(wrapper.Limit[byte](jsonData, 256, wrapper.PosCenter, []byte(" ... ")...)), "yaml", string(wrapper.Limit[byte](data, 256, wrapper.PosCenter, []byte(" ... ")...)))
+//		mc.GetMetricByJson(logger, jsonData, rcs, metrics)
+//	}
+//}
 
 func (mc *MetricConfig) SetLogger(logger log.Logger) {
 	mc.logger = log.With(logger, "metric", mc.Name)
@@ -310,6 +475,15 @@ type MetricGenerator struct {
 	Datapoint  *MetricConfig
 	logger     log.Logger
 	Name       string
+}
+
+func NewMetricGenerator(logger log.Logger, name string, metricType MetricType) *MetricGenerator {
+	return &MetricGenerator{
+		logger:     logger,
+		MetricType: metricType,
+		Name:       name,
+		Labels:     Labels{{Name: "name", Value: name}},
+	}
 }
 
 var ErrValueIsNull = fmt.Errorf("metric value is null")
@@ -373,7 +547,7 @@ func (m *MetricGenerator) getOpts() (prometheus.Opts, error) {
 	return opts, nil
 }
 
-func (m *MetricGenerator) getMetrics() ([]prometheus.Metric, []error) {
+func (m *MetricGenerator) GetMetrics() ([]prometheus.Metric, []error) {
 	opts, err := m.getOpts()
 	if err != nil {
 		return nil, []error{err}

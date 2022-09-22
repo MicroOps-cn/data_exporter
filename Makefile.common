@@ -124,7 +124,7 @@ endif
 %: common-% ;
 
 .PHONY: common-all
-common-all: precheck style check_license lint yamllint unused build test
+common-all: precheck style check_license lint yamllint unused ui build test
 
 .PHONY: common-style
 common-style:
@@ -139,7 +139,7 @@ common-style:
 .PHONY: common-check_license
 common-check_license:
 	@echo ">> checking license header"
-	@licRes=$$(for file in $$(find . -type f -iname '*.go' ! -path './vendor/*' ! -path './pkg/tail@v1.0.0/*') ; do \
+	@licRes=$$(for file in $$(find . -type f -regextype posix-extended -regex ".*\.(go|tsx|css|js|ts)" ! -path './transport/static/*' ! -path './ui/build/*' ! -path './ui/node_modules/*' ! -path './vendor/*' ! -path './pkg/tail@v1.0.0/*') ; do \
                awk 'NR<=3' $$file | grep -Eq "(Copyright|generated|GENERATED)" || echo $$file; \
        done); \
        if [ -n "$${licRes}" ]; then \
@@ -315,3 +315,8 @@ $(1)_precheck:
 		exit 1; \
 	fi
 endef
+
+.PHONY: ui
+ui:
+	cd ui/ && yarn build
+	rm -rf transport/static && mv ui/build transport/static

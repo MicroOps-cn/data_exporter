@@ -39,13 +39,32 @@ make common-build && docker build -t data_exporter .
 
 #### 调试配置文件
 
+##### 在CLI中调试
+
 ```shell
 ./data_exporter debug --config.path="data_exporter.yaml"
 ```
+
 或者使用Docker:
+
 ```bash
 docker run  -it --rm -v `pwd`:/etc/data_exporter/ --name data_exporter microops/data_exporter debug  
 ```
+
+##### 在Web UI中调试
+
+```shell
+./data_exporter --config.path="data_exporter.yaml" --web.ui-enable
+```
+
+或者使用Docker:
+
+```bash
+docker run  -it --rm -v `pwd`:/etc/data_exporter/ -p 9116:9116 --name data_exporter microops/data_exporter --web.ui-enable  
+```
+
+然后访问 `http://localhost:9116/-/ui/static/`
+![](./docs/images/debug-ui.png)
 
 #### 启动examples
 
